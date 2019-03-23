@@ -1,0 +1,34 @@
+syntax = "proto2";
+
+package drones;
+
+message Location {
+  optional int32 x = 1;
+  optional int32 y = 2;
+}
+
+message Product {
+  optional int32 m = 1;
+}
+
+message Warehouse {
+  optional Location location = 1;
+  repeated int32 stock = 2;
+}
+
+message Order {
+  optional Location location = 1;
+  repeated int32 request = 2;
+}
+
+message Problem {
+  optional int32 T = 1;
+  optional int32 Np = 2;
+  optional int32 Nw = 3;
+  optional int32 No = 4;
+  optional int32 Nd = 5;
+  optional int32 M = 6;
+  repeated Product product = 7;
+  repeated Warehouse warehouse = 8;
+  repeated Order order = 9;
+}

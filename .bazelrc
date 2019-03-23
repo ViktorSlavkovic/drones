@@ -1,0 +1,4 @@
+build --copt="--std=c++17"
+build --copt="-O3"
+
+#build --compiler="clang"

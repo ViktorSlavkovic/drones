@@ -1,0 +1,36 @@
+syntax = "proto2";
+
+package drones;
+
+import "problem.proto";
+
+message DroneCommand {
+  enum CommandType {
+    LOAD = 0;
+    UNLOAD = 1;
+    DELIVER = 2;
+    WAIT = 3;
+  }
+  optional CommandType type = 1;
+  optional int32 drone_id = 2;
+  optional int32 start_time = 3;
+  // Used for LOAD, UNLOAD and DELIVER.
+  optional int32 product = 4;
+  // Used for LOAD, UNLOAD and DELIVER.
+  optional int32 num_items = 5;
+  // Used for LOAD and UNLOAD.
+  optional int32 warehouse = 6;
+  // Used for DELIVER only.
+  optional int32 order = 7;
+  // Used for WAIT only.
+  optional int32 duration = 8;
+}
+
+message DroneDesc {
+  repeated DroneCommand drone_command = 1;
+}
+
+message Solution {
+  optional Problem problem = 1;
+  repeated DroneDesc drone_desc = 2;
+}
