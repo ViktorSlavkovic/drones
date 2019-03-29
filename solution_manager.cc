@@ -121,6 +121,7 @@ bool SolutionManager::Simulate(const Solution& solution, int* score) {
 
   int res = 0;  // The score.
   // Passing through all the relevant moments.
+  LOG(INFO) << "Simulate: Passing through all the relevant moments.";
   for (const auto& moment : timeline) {
     if (moment.first > problem.t()) {
       LOG(ERROR) << "Simultaion time exceeded.";

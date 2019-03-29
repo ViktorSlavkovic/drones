@@ -1,6 +1,6 @@
 syntax = "proto2";
 
-package drones.glop_solver;
+package drones.lp_solver;
 
 message VariableDesc {
   enum VariableType {

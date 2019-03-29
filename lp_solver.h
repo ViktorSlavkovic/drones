@@ -1,8 +1,9 @@
-#ifndef GLOP_PROBLEM_SOLVER_H_
-#define GLOP_PROBLEM_SOLVER_H_
+#ifndef LP_SOLVER_H_
+#define LP_SOLVER_H_
 
-#include "glop_problem_solver.pb.h"
+#include "lp_solver.pb.h"
 #include "problem_solver.h"
+#include "glog/logging.h"
 
 #include <memory>
 #include <string>
@@ -11,15 +12,15 @@
 
 namespace drones {
 
-class GlopProblemSolver : public ProblemSolver {
+class LpSolver : public ProblemSolver {
  public:
-  explicit GlopProblemSolver(const Problem& problem);
+  explicit LpSolver(const Problem& problem);
   std::unique_ptr<Solution> Solve() override;
 
  private:
   // Polynomial consisting of the decision variables.
   struct Polynomial {
-    std::map<std::string, double> coef;
+    std::unordered_map<std::string, double> coef;
 
     // Overloading basic operators for the Polynomial type.
     Polynomial& operator*=(double rhs) {
@@ -48,17 +49,14 @@ class GlopProblemSolver : public ProblemSolver {
   // Order score coefficients standing by order_completeness auxiliary
   // variables as an attempt of problem linearization.
   const std::vector<double> score_coefficients_;
-  // Maximum number of ordered items of a single product.
-  int max_order_items_;
 
   // Cache initial (at the simulation start, t = 0) values of the auxiliary
   // variables.
   void CacheInitial();
-
   // Computes the the auxiliary variables as decision variables polynomials.
-  Polynomial Compute(drones::glop_solver::VariableDesc& var);
+  Polynomial Compute(drones::lp_solver::VariableDesc& var);
 };
 
 }  // namespace drones
 
-#endif  // GLOP_PROBLEM_SOLVER_H_
+#endif  // LP_SOLVER_H_

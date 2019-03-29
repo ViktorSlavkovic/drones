@@ -2,6 +2,7 @@
 #include "glog/logging.h"
 #include "problem.pb.h"
 #include "problem_manager.h"
+#include "problem_solver_factory.h"
 #include "solution.pb.h"
 #include "solution_manager.h"
 
@@ -19,15 +20,22 @@ int main(int argc, char* argv[]) {
       drones::ProblemManager::LoadProblemFromFile(FLAGS_problem_file);
   CHECK(problem != nullptr);
 
-  auto solution = drones::SolutionManager::LoadFromSolutionFile(
-      *problem, FLAGS_solution_file);
-  CHECK(solution != nullptr);
+  // auto solution = drones::SolutionManager::LoadFromSolutionFile(
+  //     *problem, FLAGS_solution_file);
 
+  auto solver = drones::ProblemSolverFactory::CreateSolver(*problem, "lp");
+  CHECK(solver != nullptr);
+
+  auto solution = solver->Solve();
+  CHECK(solution != nullptr);
+  
+  LOG(INFO) << "Starting simulation";
   int score = -1;
   if (drones::SolutionManager::Simulate(*solution, &score)) {
     LOG(INFO) << "Solution is valid and gives " << score;
   } else {
     LOG(ERROR) << "Invalid solution.";
   }
+
   return 0;
 }
