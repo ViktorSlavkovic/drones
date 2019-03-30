@@ -1,10 +1,10 @@
 #ifndef PROBLEM_SOLVER_FACTORY_H_
 #define PROBLEM_SOLVER_FACTORY_H_
 
-#include "problem_solver.h"
-
 #include <memory>
 #include <string>
+
+#include "problem_solver.h"
 
 namespace drones {
 

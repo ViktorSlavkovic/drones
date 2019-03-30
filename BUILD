@@ -1,19 +1,34 @@
 cc_library(
+    name = "random_solver",
+    srcs = ["random_solver.cc"],
+    hdrs = ["random_solver.h"],
+    linkstatic = True,
+    deps = [
+        ":problem_cc_proto",
+        ":problem_solver",
+        ":solution_cc_proto",
+        "@com_github_gflags_gflags//:gflags",
+        "@com_github_glog_glog//:glog",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_library(
     name = "lp_solver",
     srcs = ["lp_solver.cc"],
     hdrs = ["lp_solver.h"],
+    linkstatic = True,
     deps = [
         ":lp_solver_cc_proto",
         ":problem_cc_proto",
         ":problem_solver",
         ":solution_cc_proto",
-        "@com_google_absl//absl/strings",
         "@com_github_glog_glog//:glog",
+        "@com_google_absl//absl/strings",
         "@third_party_ortools//ortools/base",
         "@third_party_ortools//ortools/linear_solver",
         "@third_party_ortools//ortools/linear_solver:linear_solver_cc_proto",
     ],
-    linkstatic = True,
 )
 
 cc_proto_library(
@@ -30,22 +45,23 @@ cc_library(
     name = "problem_solver_factory",
     srcs = ["problem_solver_factory.cc"],
     hdrs = ["problem_solver_factory.h"],
+    linkstatic = True,
     deps = [
         ":lp_solver",
         ":problem_solver",
+        ":random_solver",
         "@com_github_glog_glog//:glog",
     ],
-    linkstatic = True,
 )
 
 cc_library(
     name = "problem_solver",
     hdrs = ["problem_solver.h"],
+    linkstatic = True,
     deps = [
         ":problem_cc_proto",
         ":solution_cc_proto",
     ],
-    linkstatic = True,
 )
 
 cc_test(
@@ -71,11 +87,11 @@ cc_library(
     name = "problem_manager",
     srcs = ["problem_manager.cc"],
     hdrs = ["problem_manager.h"],
+    linkstatic = True,
     deps = [
         ":problem_cc_proto",
         "@com_github_glog_glog//:glog",
     ],
-    linkstatic = True,
 )
 
 proto_library(
@@ -93,11 +109,12 @@ cc_library(
     name = "solution_manager",
     srcs = ["solution_manager.cc"],
     hdrs = ["solution_manager.h"],
+    linkstatic = True,
     deps = [
         ":solution_cc_proto",
         "@com_github_glog_glog//:glog",
+        "@com_google_absl//absl/strings",
     ],
-    linkstatic = True,
 )
 
 cc_binary(

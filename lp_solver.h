@@ -1,14 +1,14 @@
 #ifndef LP_SOLVER_H_
 #define LP_SOLVER_H_
 
-#include "lp_solver.pb.h"
-#include "problem_solver.h"
-#include "glog/logging.h"
-
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+#include "lp_solver.pb.h"
+#include "problem_solver.h"
+#include "glog/logging.h"
 
 namespace drones {
 
@@ -54,7 +54,7 @@ class LpSolver : public ProblemSolver {
   // variables.
   void CacheInitial();
   // Computes the the auxiliary variables as decision variables polynomials.
-  Polynomial Compute(drones::lp_solver::VariableDesc& var);
+  Polynomial Compute(const drones::lp_solver::VariableDesc& var);
 };
 
 }  // namespace drones

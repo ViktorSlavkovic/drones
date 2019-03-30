@@ -123,7 +123,8 @@ int Distance(const Location& src, const Location& dst) {
   return ceil(sqrt(dx * dx + dy * dy));
 }
 
-LpSolver::Polynomial LpSolver::Compute(drones::lp_solver::VariableDesc& var) {
+LpSolver::Polynomial LpSolver::Compute(
+    const drones::lp_solver::VariableDesc& var) {
   if (var.has_t()) {
     CHECK(var.t() >= 0) << "Invalid time: " << var.t();
   }
@@ -705,7 +706,8 @@ std::unique_ptr<Solution> LpSolver::Solve() {
   int nz = 0;
   std::vector<int> buckets(10, 0);
   for (const auto& p : vars) {
-    int b = static_cast<int>(p.second->solution_value() / (1.0 / buckets.size()));
+    int b =
+        static_cast<int>(p.second->solution_value() / (1.0 / buckets.size()));
     if (b >= buckets.size()) b = buckets.size() - 1;
     CHECK(b >= 0);
     buckets[b]++;

@@ -1,8 +1,8 @@
 #include "problem_manager.h"
 
-#include "glog/logging.h"
-
 #include <fstream>
+
+#include "glog/logging.h"
 
 namespace drones {
 
@@ -56,7 +56,7 @@ std::unique_ptr<Problem> ProblemManager::LoadProblemFromFile(
   return problem;
 }
 
-// TODO: Implement.
+// TODO(viktors): Implement.
 std::unique_ptr<Problem> ProblemManager::GenerateProblem() { return nullptr; }
 
 }  // namespace drones

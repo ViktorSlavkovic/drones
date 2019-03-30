@@ -20,22 +20,37 @@ int main(int argc, char* argv[]) {
       drones::ProblemManager::LoadProblemFromFile(FLAGS_problem_file);
   CHECK(problem != nullptr);
 
-  // auto solution = drones::SolutionManager::LoadFromSolutionFile(
-  //     *problem, FLAGS_solution_file);
-
-  auto solver = drones::ProblemSolverFactory::CreateSolver(*problem, "lp");
+  auto solver = drones::ProblemSolverFactory::CreateSolver(*problem, "random");
   CHECK(solver != nullptr);
 
-  auto solution = solver->Solve();
-  CHECK(solution != nullptr);
-  
-  LOG(INFO) << "Starting simulation";
-  int score = -1;
-  if (drones::SolutionManager::Simulate(*solution, &score)) {
-    LOG(INFO) << "Solution is valid and gives " << score;
-  } else {
-    LOG(ERROR) << "Invalid solution.";
+  drones::Solution best_solution;
+  int best_score = -1;
+
+  for (int num_iter = 0; num_iter < 100; num_iter++) {
+    LOG(INFO) << "**************** ITER: " << num_iter;
+
+    auto solution = solver->Solve();
+    CHECK(solution != nullptr);
+
+    LOG(INFO) << "Starting simulation";
+    int score = -1;
+    if (drones::SolutionManager::Simulate(*solution, &score)) {
+      LOG(INFO) << "Solution is valid and gives " << score;
+    } else {
+      LOG(ERROR) << "Invalid solution.";
+    }
+
+    if (score > best_score) {
+      best_score = score;
+      best_solution = *solution;
+    }
   }
+
+  LOG(INFO) << "BEST SCORE: " << best_score;
+  LOG(INFO) << "Saving the solution...";
+  CHECK(drones::SolutionManager::SaveToSolutionFile(best_solution,
+                                                    FLAGS_solution_file))
+      << "Failed to save the solution.";
 
   return 0;
 }

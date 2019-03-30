@@ -3,6 +3,7 @@
 
 #include "solution.pb.h"
 
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -16,6 +17,9 @@ class SolutionManager {
   // and the given problem.
   static std::unique_ptr<Solution> LoadFromSolutionFile(
       const Problem& problem, const std::string& path);
+  // Save the solution to a solution file, as specified in the Hashcode task.
+  static bool SaveToSolutionFile(const Solution& solution,
+                                 const std::string& path);
   // Saves the whole Solution proto to a file as a text-proto.
   static bool SaveToProtoFile(const Solution& solution,
                               const std::string& path);

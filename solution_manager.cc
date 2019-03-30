@@ -1,7 +1,5 @@
 #include "solution_manager.h"
 
-#include "glog/logging.h"
-
 #include <cctype>
 #include <cmath>
 #include <fstream>
@@ -9,6 +7,9 @@
 #include <tuple>
 #include <utility>
 #include <vector>
+
+#include "absl/strings/substitute.h"
+#include "glog/logging.h"
 
 namespace drones {
 
@@ -129,7 +130,7 @@ bool SolutionManager::Simulate(const Solution& solution, int* score) {
     }
     // Handle commands.
     for (const auto& cmd : moment.second) {
-      LOG(INFO) << "Command: " << cmd.DebugString();
+      // LOG(INFO) << "Command: " << cmd.DebugString();
 
       // Check the command timing.
       if (drone_busy_until[cmd.drone_id()] > moment.first - 1) {
@@ -226,8 +227,8 @@ bool SolutionManager::Simulate(const Solution& solution, int* score) {
       }
       order_inventory[std::get<0>(x)].Update(std::get<1>(x), -std::get<2>(x));
       if (order_inventory[std::get<0>(x)].GetNumProducts() == 0) {
-        LOG(INFO) << "Order " << std::get<0>(x)
-                  << " completed at t = " << moment.first;
+        // LOG(INFO) << "Order " << std::get<0>(x)
+        //          << " completed at t = " << moment.first;
         res += ceil(((problem.t() - moment.first + 1) * 100.0) / problem.t());
       }
     }
@@ -351,6 +352,49 @@ std::unique_ptr<Solution> SolutionManager::LoadFromProtoFile(
     return nullptr;
   }
   return solution;
+}
+
+bool SolutionManager::SaveToSolutionFile(const Solution& solution,
+                                         const std::string& path) {
+  std::ofstream fout(path);
+  if (!fout.good()) {
+    LOG(ERROR) << "Failed to open file: " << path;
+    return false;
+  }
+  int num_drone_cmds = 0;
+  for (const auto& dd : solution.drone_desc()) {
+    num_drone_cmds += dd.drone_command_size();
+  }
+  fout << num_drone_cmds << std::endl;
+  for (const auto& dd : solution.drone_desc()) {
+    for (const auto& cmd : dd.drone_command()) {
+      switch (cmd.type()) {
+        case DroneCommand_CommandType_WAIT: {
+          fout << absl::Substitute("$0 W $1\n", cmd.drone_id(), cmd.duration());
+          break;
+        }
+        case DroneCommand_CommandType_LOAD: {
+          fout << absl::Substitute("$0 L $1 $2 $3\n", cmd.drone_id(),
+                                   cmd.warehouse(), cmd.product(),
+                                   cmd.num_items());
+          break;
+        }
+        case DroneCommand_CommandType_UNLOAD: {
+          fout << absl::Substitute("$0 U $1 $2 $3\n", cmd.drone_id(),
+                                   cmd.warehouse(), cmd.product(),
+                                   cmd.num_items());
+          break;
+        }
+        case DroneCommand_CommandType_DELIVER: {
+          fout << absl::Substitute("$0 D $1 $2 $3\n", cmd.drone_id(),
+                                   cmd.order(), cmd.product(), cmd.num_items());
+          break;
+        }
+      }
+    }
+  }
+  fout.close();
+  return true;
 }
 
 }  // namespace drones
