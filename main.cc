@@ -17,7 +17,7 @@ int main(int argc, char* argv[]) {
   gflags::ParseCommandLineFlags(&argc, &argv, true);
 
   auto problem =
-      drones::ProblemManager::LoadProblemFromFile(FLAGS_problem_file);
+      drones::ProblemManager::LoadFromProblemFile(FLAGS_problem_file);
   CHECK(problem != nullptr);
 
   auto solver = drones::ProblemSolverFactory::CreateSolver(*problem, "random");

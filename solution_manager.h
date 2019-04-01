@@ -20,11 +20,13 @@ class SolutionManager {
   // Save the solution to a solution file, as specified in the Hashcode task.
   static bool SaveToSolutionFile(const Solution& solution,
                                  const std::string& path);
-  // Saves the whole Solution proto to a file as a text-proto.
+  // Loads the whole Solution proto (including the problem) from a
+  // serialized-proto file.
+  static std::unique_ptr<Solution> LoadFromProtoFile(const std::string& path);
+  // Saves the whole Solution proto (including the problem) to a
+  // serialized-proto file.
   static bool SaveToProtoFile(const Solution& solution,
                               const std::string& path);
-  // Loads the whole Solution proto from a text-proto file.
-  static std::unique_ptr<Solution> LoadFromProtoFile(const std::string& path);
 };
 
 };  // namespace drones

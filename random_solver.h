@@ -13,6 +13,7 @@ class RandomSolver : public ProblemSolver {
  public:
   explicit RandomSolver(const Problem& problem);
   std::unique_ptr<Solution> Solve() override;
+  bool CanSolve(const ProblemType& problem_type) const override { return true; }
 };
 
 }  // namespace drones

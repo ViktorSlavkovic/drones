@@ -83,6 +83,15 @@ cc_proto_library(
     deps = [":problem_proto"],
 )
 
+cc_test(
+    name = "problem_manager_test",
+    srcs = ["problem_manager_test.cc"],
+    deps = [
+        ":problem_manager",
+        "@gtest",
+    ],
+)
+
 cc_library(
     name = "problem_manager",
     srcs = ["problem_manager.cc"],
@@ -91,6 +100,7 @@ cc_library(
     deps = [
         ":problem_cc_proto",
         "@com_github_glog_glog//:glog",
+        "@com_google_absl//absl/strings",
     ],
 )
 

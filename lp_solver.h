@@ -16,6 +16,7 @@ class LpSolver : public ProblemSolver {
  public:
   explicit LpSolver(const Problem& problem);
   std::unique_ptr<Solution> Solve() override;
+  bool CanSolve(const ProblemType& problem_type) const override { return true; }
 
  private:
   // Polynomial consisting of the decision variables.

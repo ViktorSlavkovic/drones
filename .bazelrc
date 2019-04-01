@@ -1,4 +1,7 @@
 build --copt="--std=c++17"
 build --copt="-O3"
-
+test --copt="--std=c++17"
+test --copt="-O3"
+test --test_output=all
+test --action_env="GTEST_COLOR=1"
 #build --compiler="clang"

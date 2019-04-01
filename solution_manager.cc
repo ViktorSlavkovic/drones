@@ -324,36 +324,6 @@ std::unique_ptr<Solution> SolutionManager::LoadFromSolutionFile(
   return solution;
 }
 
-bool SolutionManager::SaveToProtoFile(const Solution& solution,
-                                      const std::string& path) {
-  std::ofstream fout(path);
-  if (!fout.good()) {
-    LOG(ERROR) << "Failed to open file: " << path;
-    return false;
-  }
-  if (!solution.SerializeToOstream(&fout)) {
-    LOG(ERROR) << "Failed to serialize to ostream";
-    return false;
-  }
-  fout.close();
-  return true;
-}
-
-std::unique_ptr<Solution> SolutionManager::LoadFromProtoFile(
-    const std::string& path) {
-  auto solution = std::make_unique<Solution>();
-  std::ifstream fin(path);
-  if (!fin.good()) {
-    LOG(ERROR) << "Failed to open file: " << path;
-    return nullptr;
-  }
-  if (!solution->ParseFromIstream(&fin)) {
-    LOG(ERROR) << "Failed to parse from istream";
-    return nullptr;
-  }
-  return solution;
-}
-
 bool SolutionManager::SaveToSolutionFile(const Solution& solution,
                                          const std::string& path) {
   std::ofstream fout(path);
@@ -392,6 +362,36 @@ bool SolutionManager::SaveToSolutionFile(const Solution& solution,
         }
       }
     }
+  }
+  fout.close();
+  return true;
+}
+
+std::unique_ptr<Solution> SolutionManager::LoadFromProtoFile(
+    const std::string& path) {
+  auto solution = std::make_unique<Solution>();
+  std::ifstream fin(path);
+  if (!fin.good()) {
+    LOG(ERROR) << "Failed to open file: " << path;
+    return nullptr;
+  }
+  if (!solution->ParseFromIstream(&fin)) {
+    LOG(ERROR) << "Failed to parse from istream";
+    return nullptr;
+  }
+  return solution;
+}
+
+bool SolutionManager::SaveToProtoFile(const Solution& solution,
+                                      const std::string& path) {
+  std::ofstream fout(path);
+  if (!fout.good()) {
+    LOG(ERROR) << "Failed to open file: " << path;
+    return false;
+  }
+  if (!solution.SerializeToOstream(&fout)) {
+    LOG(ERROR) << "Failed to serialize to ostream";
+    return false;
   }
   fout.close();
   return true;

@@ -21,6 +21,26 @@ message Order {
   repeated int32 request = 2;
 }
 
+message ProblemType {
+  // Nd = 1: There's only one drone.
+  optional bool Nd_1 = 1 [default = false];
+  // All product weights are equal: m[1] = m[2] = ... = m[p] = m and that equals
+  // drone capacity: M = m. If M != m, but m > M/2, it still falls into this
+  // category.
+  optional bool M_m = 2 [default = false];
+  // Nw = 1: There's only one warehouse.
+  optional bool Nw_1 = 3 [default = false];
+  // S0 = inf: All warehouses have infinite stock. We'll use max integer value
+  // for inf.
+  optional bool S0_inf = 4 [default = false];
+  // Np = 1: There's only one product.
+  optional bool Np_1 = 5 [default = false];
+  // No = 1: There's only one order.
+  optional bool No_1 = 6 [default = false];
+  // IPO = 1: There's only one item per order.
+  optional bool IPO_1 = 7 [default = false];
+}
+
 message Problem {
   optional int32 T = 1;
   optional int32 Np = 2;
@@ -31,4 +51,6 @@ message Problem {
   repeated Product product = 7;
   repeated Warehouse warehouse = 8;
   repeated Order order = 9;
+  optional ProblemType problem_type = 10;
 }
+

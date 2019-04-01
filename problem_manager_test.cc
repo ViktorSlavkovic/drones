@@ -1,0 +1,21 @@
+#include "problem_manager.h"
+#include "gtest/gtest.h"
+#include "glog/logging.h"
+
+namespace drones {
+
+TEST(ProblemManagerTest, SaveLoadProblemFile) {
+  auto problem = ProblemManager::GenerateProblem(ProblemType(), 0);
+  ASSERT_NE(problem, nullptr);
+  ASSERT_TRUE(ProblemManager::SaveToProblemFile(*problem, "/tmp/problem.in"));
+  auto loaded_problem = ProblemManager::LoadFromProblemFile("/tmp/problem.in");
+  ASSERT_NE(loaded_problem, nullptr);
+  EXPECT_EQ(problem->DebugString(), loaded_problem->DebugString());
+}
+
+}  // namespace drones
+
+int main(int argc, char **argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}
