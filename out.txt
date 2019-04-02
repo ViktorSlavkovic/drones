@@ -1,0 +1,74 @@
+Loading: 
+Loading: 0 packages loaded
+Analyzing: target //:sp2_main (0 packages loaded, 0 targets configured)
+INFO: Analysed target //:sp2_main (0 packages loaded, 0 targets configured).
+INFO: Found 1 target...
+[0 / 1] [-----] BazelWorkspaceStatusAction stable-status.txt
+Target //:sp2_main up-to-date:
+  bazel-bin/sp2_main
+INFO: Elapsed time: 0.100s, Critical Path: 0.00s
+INFO: 0 processes.
+INFO: Build completed successfully, 1 total action
+INFO: Running command line: bazel-bin/sp2_main
+INFO: Build completed successfully, 1 total action
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+I0403 00:25:20.213394   930 sp2_main.cc:27] 
+TP 1/10: Nw = 55, Req=32, T = 427451
+I0403 00:25:20.213455   930 sp2_main.cc:36]   Running random solver...
+I0403 00:25:20.227417   930 sp2_main.cc:46]     got: 22
+I0403 00:25:20.227427   930 sp2_main.cc:54]   Running sp2 solver...
+I0403 00:25:20.227488   930 sp2_main.cc:60]     got: 92
+I0403 00:25:20.227506   930 sp2_main.cc:27] 
+TP 2/10: Nw = 1, Req=10, T = 685524
+I0403 00:25:20.227511   930 sp2_main.cc:36]   Running random solver...
+I0403 00:25:20.231699   930 sp2_main.cc:46]     got: 100
+I0403 00:25:20.231703   930 sp2_main.cc:54]   Running sp2 solver...
+I0403 00:25:20.231722   930 sp2_main.cc:60]     got: 100
+I0403 00:25:20.231756   930 sp2_main.cc:27] 
+TP 3/10: Nw = 99, Req=7, T = 895721
+I0403 00:25:20.231768   930 sp2_main.cc:36]   Running random solver...
+I0403 00:25:20.238442   930 sp2_main.cc:46]     got: 96
+I0403 00:25:20.238454   930 sp2_main.cc:54]   Running sp2 solver...
+I0403 00:25:20.238492   930 sp2_main.cc:60]     got: 99
+I0403 00:25:20.238524   930 sp2_main.cc:27] 
+TP 4/10: Nw = 32, Req=41, T = 465882
+I0403 00:25:20.238531   930 sp2_main.cc:36]   Running random solver...
+I0403 00:25:20.254181   930 sp2_main.cc:46]     got: 39
+I0403 00:25:20.254189   930 sp2_main.cc:54]   Running sp2 solver...
+I0403 00:25:20.254247   930 sp2_main.cc:60]     got: 87
+I0403 00:25:20.254274   930 sp2_main.cc:27] 
+TP 5/10: Nw = 61, Req=11, T = 442035
+I0403 00:25:20.254284   930 sp2_main.cc:36]   Running random solver...
+I0403 00:25:20.260991   930 sp2_main.cc:46]     got: 86
+I0403 00:25:20.261000   930 sp2_main.cc:54]   Running sp2 solver...
+I0403 00:25:20.261034   930 sp2_main.cc:60]     got: 98
+I0403 00:25:20.261054   930 sp2_main.cc:27] 
+TP 6/10: Nw = 7, Req=18, T = 85048
+I0403 00:25:20.261057   930 sp2_main.cc:36]   Running random solver...
+I0403 00:25:20.265486   930 sp2_main.cc:46]     got: 0
+I0403 00:25:20.265489   930 sp2_main.cc:54]   Running sp2 solver...
+I0403 00:25:20.265522   930 sp2_main.cc:60]     got: 2
+I0403 00:25:20.265554   930 sp2_main.cc:27] 
+TP 7/10: Nw = 96, Req=38, T = 160681
+I0403 00:25:20.265566   930 sp2_main.cc:36]   Running random solver...
+I0403 00:25:20.274428   930 sp2_main.cc:46]     got: 0
+I0403 00:25:20.274441   930 sp2_main.cc:54]   Running sp2 solver...
+I0403 00:25:20.274514   930 sp2_main.cc:60]     got: 70
+I0403 00:25:20.274550   930 sp2_main.cc:27] 
+TP 8/10: Nw = 47, Req=16, T = 823501
+I0403 00:25:20.274559   930 sp2_main.cc:36]   Running random solver...
+I0403 00:25:20.282441   930 sp2_main.cc:46]     got: 81
+I0403 00:25:20.282450   930 sp2_main.cc:54]   Running sp2 solver...
+I0403 00:25:20.282488   930 sp2_main.cc:60]     got: 98
+I0403 00:25:20.282506   930 sp2_main.cc:27] 
+TP 9/10: Nw = 13, Req=28, T = 181462
+I0403 00:25:20.282511   930 sp2_main.cc:36]   Running random solver...
+I0403 00:25:20.289427   930 sp2_main.cc:46]     got: 0
+I0403 00:25:20.289432   930 sp2_main.cc:54]   Running sp2 solver...
+I0403 00:25:20.289474   930 sp2_main.cc:60]     got: 3
+I0403 00:25:20.289503   930 sp2_main.cc:27] 
+TP 10/10: Nw = 84, Req=10, T = 342247
+I0403 00:25:20.289515   930 sp2_main.cc:36]   Running random solver...
+I0403 00:25:20.296784   930 sp2_main.cc:46]     got: 77
+I0403 00:25:20.296795   930 sp2_main.cc:54]   Running sp2 solver...
+I0403 00:25:20.296829   930 sp2_main.cc:60]     got: 97

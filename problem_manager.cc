@@ -12,6 +12,8 @@
 #include "absl/strings/substitute.h"
 #include "glog/logging.h"
 
+DEFINE_int32(max_ipo, 10000, "Max number of items per order");
+
 namespace drones {
 
 std::unique_ptr<Problem> ProblemManager::GenerateProblem(
@@ -79,7 +81,7 @@ std::unique_ptr<Problem> ProblemManager::GenerateProblem(
         num_items = product == chosen_product ? 1 : 0;
       } else {
         num_items =
-            otgen(product == chosen_product ? 1 : 0, 10000 / problem->np());
+            otgen(product == chosen_product ? 1 : 0, FLAGS_max_ipo / problem->np());
       }
       total_requested[product] += num_items;
       order_proto->add_request(num_items);

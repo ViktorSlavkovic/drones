@@ -190,7 +190,7 @@ unique_ptr<Solution> RandomSolver::Solve() {
     int drone = decision_schedule.top().second;
     if (t >= next_log) {
       next_log += 1000;
-      LOG(INFO) << "t: " << t << " / " << problem_.t();
+      //LOG(INFO) << "t: " << t << " / " << problem_.t();
     }
     if (t > problem_.t()) {
       LOG(WARNING)

@@ -1,3 +1,61 @@
+cc_binary(
+    name = "sp2_main",
+    srcs = ["sp2_main.cc"],
+    linkstatic = True,
+    deps = [
+        ":problem_cc_proto",
+        ":problem_manager",
+        ":problem_solver_factory",
+        ":solution_cc_proto",
+        ":solution_manager",
+        "@com_github_gflags_gflags//:gflags",
+        "@com_github_glog_glog//:glog",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_library(
+    name = "sp2_solver",
+    srcs = ["sp2_solver.cc"],
+    hdrs = ["sp2_solver.h"],
+    linkstatic = True,
+    deps = [
+        ":problem_cc_proto",
+        ":problem_solver",
+        ":solution_cc_proto",
+        "@com_github_glog_glog//:glog",
+    ],
+)
+
+cc_binary(
+    name = "sp1_main",
+    srcs = ["sp1_main.cc"],
+    linkstatic = True,
+    deps = [
+        ":problem_cc_proto",
+        ":problem_manager",
+        ":problem_solver_factory",
+        ":solution_cc_proto",
+        ":solution_manager",
+        "@com_github_gflags_gflags//:gflags",
+        "@com_github_glog_glog//:glog",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_library(
+    name = "sp1_solver",
+    srcs = ["sp1_solver.cc"],
+    hdrs = ["sp1_solver.h"],
+    linkstatic = True,
+    deps = [
+        ":problem_cc_proto",
+        ":problem_solver",
+        ":solution_cc_proto",
+        "@com_github_glog_glog//:glog",
+    ],
+)
+
 cc_library(
     name = "random_solver",
     srcs = ["random_solver.cc"],
@@ -50,6 +108,8 @@ cc_library(
         ":lp_solver",
         ":problem_solver",
         ":random_solver",
+        ":sp1_solver",
+        ":sp2_solver",
         "@com_github_glog_glog//:glog",
     ],
 )

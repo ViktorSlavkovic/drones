@@ -6,6 +6,9 @@
 #include <string>
 
 #include "problem.pb.h"
+#include "gflags/gflags.h"
+
+DECLARE_int32(max_ipo);
 
 namespace drones {
 
