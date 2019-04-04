@@ -1,4 +1,49 @@
 cc_binary(
+    name = "sp4_main",
+    srcs = ["sp4_main.cc"],
+    linkstatic = True,
+    deps = [
+        ":problem_cc_proto",
+        ":problem_manager",
+        ":problem_solver_factory",
+        ":solution_cc_proto",
+        ":solution_manager",
+        "@com_github_gflags_gflags//:gflags",
+        "@com_github_glog_glog//:glog",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_library(
+    name = "sp4_solver",
+    srcs = ["sp4_solver.cc"],
+    hdrs = ["sp4_solver.h"],
+    linkstatic = True,
+    deps = [
+        ":lp_util",
+        ":problem_cc_proto",
+        ":problem_solver",
+        ":solution_cc_proto",
+        ":sp4_solver_cc_proto",
+        "@com_github_glog_glog//:glog",
+        "@com_google_absl//absl/strings",
+        "@third_party_ortools//ortools/base",
+        "@third_party_ortools//ortools/linear_solver",
+        "@third_party_ortools//ortools/linear_solver:linear_solver_cc_proto",
+    ],
+)
+
+cc_proto_library(
+    name = "sp4_solver_cc_proto",
+    deps = [":sp4_solver_proto"],
+)
+
+proto_library(
+    name = "sp4_solver_proto",
+    srcs = ["sp4_solver.proto"],
+)
+
+cc_binary(
     name = "sp2_main",
     srcs = ["sp2_main.cc"],
     linkstatic = True,
@@ -78,6 +123,7 @@ cc_library(
     linkstatic = True,
     deps = [
         ":lp_solver_cc_proto",
+        ":lp_util",
         ":problem_cc_proto",
         ":problem_solver",
         ":solution_cc_proto",
@@ -100,6 +146,16 @@ proto_library(
 )
 
 cc_library(
+    name = "lp_util",
+    srcs = ["lp_util.cc"],
+    hdrs = ["lp_util.h"],
+    deps = [
+        "@com_github_glog_glog//:glog",
+        "@com_google_protobuf_cc//:protobuf",
+    ],
+)
+
+cc_library(
     name = "problem_solver_factory",
     srcs = ["problem_solver_factory.cc"],
     hdrs = ["problem_solver_factory.h"],
@@ -110,6 +166,7 @@ cc_library(
         ":random_solver",
         ":sp1_solver",
         ":sp2_solver",
+        ":sp4_solver",
         "@com_github_glog_glog//:glog",
     ],
 )

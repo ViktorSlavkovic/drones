@@ -15,9 +15,10 @@ DEFINE_string(solution_file, "",
 
 int main(int argc, char* argv[]) {
   gflags::ParseCommandLineFlags(&argc, &argv, true);
-
+  
   auto problem =
-      drones::ProblemManager::LoadFromProblemFile(FLAGS_problem_file);
+  //     drones::ProblemManager::GenerateProblem(drones::ProblemType());
+       drones::ProblemManager::LoadFromProblemFile(FLAGS_problem_file);
   CHECK(problem != nullptr);
 
   auto solver = drones::ProblemSolverFactory::CreateSolver(*problem, "random");

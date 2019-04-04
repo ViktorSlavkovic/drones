@@ -9,6 +9,12 @@
 #include "gflags/gflags.h"
 
 DECLARE_int32(max_ipo);
+DECLARE_int32(max_coord);
+DECLARE_int32(max_nd);
+DECLARE_int32(max_nw);
+DECLARE_int32(max_np);
+DECLARE_int32(max_no);
+DECLARE_int32(max_M);
 
 namespace drones {
 

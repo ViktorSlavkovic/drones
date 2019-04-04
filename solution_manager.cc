@@ -130,8 +130,6 @@ bool SolutionManager::Simulate(const Solution& solution, int* score) {
     }
     // Handle commands.
     for (const auto& cmd : moment.second) {
-      // LOG(INFO) << "Command: " << cmd.DebugString();
-
       // Check the command timing.
       if (drone_busy_until[cmd.drone_id()] > moment.first - 1) {
         LOG(ERROR) << "A single drone's commands can't overlap!";

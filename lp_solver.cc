@@ -9,6 +9,7 @@
 #include "absl/strings/str_join.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
+#include "lp_util.h"
 #include "ortools/linear_solver/linear_solver.h"
 #include "ortools/linear_solver/linear_solver.pb.h"
 #include "problem.pb.h"
@@ -55,12 +56,6 @@ LpSolver::LpSolver(const Problem& problem)
   CacheInitial();
 }
 
-std::string& hashit(const lp_solver::VariableDesc& var) {
-  static std::string hashval;
-  CHECK(var.SerializeToString(&hashval)) << "Failed to serialize.";
-  return hashval;
-}
-
 void LpSolver::CacheInitial() {
   lp_solver::VariableDesc var;
 
@@ -70,10 +65,10 @@ void LpSolver::CacheInitial() {
   for (int drone = 0; drone < problem_.nd(); drone++) {
     var.set_drone(drone);
     var.set_location(0);
-    aux_var_cache_[hashit(var)].coef["const"] = 1;
+    aux_var_cache_[lin_prog::SavyProtoHash(var)].coef["const"] = 1;
     for (int loc = 1; loc < problem_.nw() + problem_.no(); loc++) {
       var.set_location(loc);
-      aux_var_cache_[hashit(var)].coef["const"] = 0;
+      aux_var_cache_[lin_prog::SavyProtoHash(var)].coef["const"] = 0;
     }
   }
   var.Clear();
@@ -85,7 +80,7 @@ void LpSolver::CacheInitial() {
     var.set_warehouse(warehouse);
     for (int product = 0; product < problem_.np(); product++) {
       var.set_product(product);
-      aux_var_cache_[hashit(var)].coef["const"] =
+      aux_var_cache_[lin_prog::SavyProtoHash(var)].coef["const"] =
           problem_.warehouse(warehouse).stock(product);
     }
   }
@@ -98,7 +93,7 @@ void LpSolver::CacheInitial() {
     var.set_drone(drone);
     for (int product = 0; product < problem_.np(); product++) {
       var.set_product(product);
-      aux_var_cache_[hashit(var)].coef["const"] = 0;
+      aux_var_cache_[lin_prog::SavyProtoHash(var)].coef["const"] = 0;
     }
   }
   var.Clear();
@@ -110,7 +105,7 @@ void LpSolver::CacheInitial() {
     var.set_order(order);
     for (int product = 0; product < problem_.np(); product++) {
       var.set_product(product);
-      aux_var_cache_[hashit(var)].coef["const"] =
+      aux_var_cache_[lin_prog::SavyProtoHash(var)].coef["const"] =
           problem_.order(order).request(product);
     }
   }
@@ -130,7 +125,7 @@ LpSolver::Polynomial LpSolver::Compute(
   }
 
   // Check the cache.
-  std::string var_hash = hashit(var);
+  std::string var_hash = lin_prog::SavyProtoHash(var);
   if (aux_var_cache_.count(var_hash)) {
     return aux_var_cache_[var_hash];
   }
@@ -209,7 +204,7 @@ LpSolver::Polynomial LpSolver::Compute(
                        problem_.m() / problem_.product(var.product()).m());
           for (int num_items = 1; num_items <= max_num_items; num_items++) {
             dep_var.set_num_items(num_items);
-            delivery.coef[hashit(dep_var)] = num_items;
+            delivery.coef[lin_prog::SavyProtoHash(dep_var)] = num_items;
           }
         }
       }
@@ -253,9 +248,9 @@ LpSolver::Polynomial LpSolver::Compute(
           for (int num_items = 1; num_items <= drone_cap_items; num_items++) {
             dep_var.set_num_items(num_items);
             dep_var.set_type(lp_solver::VariableDesc_VariableType_LOAD);
-            traffic.coef[hashit(dep_var)] = num_items;
+            traffic.coef[lin_prog::SavyProtoHash(dep_var)] = num_items;
             dep_var.set_type(lp_solver::VariableDesc_VariableType_UNLOAD);
-            traffic.coef[hashit(dep_var)] = -num_items;
+            traffic.coef[lin_prog::SavyProtoHash(dep_var)] = -num_items;
           }
         }
         dep_var.clear_warehouse();
@@ -282,7 +277,7 @@ LpSolver::Polynomial LpSolver::Compute(
                        problem_.m() / problem_.product(var.product()).m());
           for (int num_items = 1; num_items <= max_num_items; num_items++) {
             dep_var.set_num_items(num_items);
-            traffic.coef[hashit(dep_var)] = -num_items;
+            traffic.coef[lin_prog::SavyProtoHash(dep_var)] = -num_items;
           }
         }
       }
@@ -295,7 +290,7 @@ LpSolver::Polynomial LpSolver::Compute(
       dep_var.set_location(var.location());
       dep_var.set_t(var.t() - 1);
       dep_var.set_type(lp_solver::VariableDesc_VariableType_WAIT);
-      res.coef[hashit(dep_var)] = 1;
+      res.coef[lin_prog::SavyProtoHash(dep_var)] = 1;
 
       int dst_loc = var.location();
       Location actual_dst_loc;
@@ -330,9 +325,9 @@ LpSolver::Polynomial LpSolver::Compute(
             for (int num_items = 1; num_items <= drone_cap_items; num_items++) {
               dep_var.set_num_items(num_items);
               dep_var.set_type(lp_solver::VariableDesc_VariableType_UNLOAD);
-              res.coef[hashit(dep_var)] = 1;
+              res.coef[lin_prog::SavyProtoHash(dep_var)] = 1;
               dep_var.set_type(lp_solver::VariableDesc_VariableType_LOAD);
-              res.coef[hashit(dep_var)] = 1;
+              res.coef[lin_prog::SavyProtoHash(dep_var)] = 1;
             }
           } else {
             int max_num_items =
@@ -340,7 +335,7 @@ LpSolver::Polynomial LpSolver::Compute(
                          problem_.m() / problem_.product(product).m());
             for (int num_items = 1; num_items <= max_num_items; num_items++) {
               dep_var.set_type(lp_solver::VariableDesc_VariableType_DELIVER);
-              res.coef[hashit(dep_var)] = 1;
+              res.coef[lin_prog::SavyProtoHash(dep_var)] = 1;
             }
           }
         }
@@ -384,17 +379,19 @@ LpSolver::Polynomial LpSolver::Compute(
             dep_var.set_num_items(num_items);
 
             dep_var.set_type(lp_solver::VariableDesc_VariableType_UNLOAD);
-            traffic.coef[hashit(dep_var)] = num_items;
+            traffic.coef[lin_prog::SavyProtoHash(dep_var)] = num_items;
 
             dep_var.set_type(lp_solver::VariableDesc_VariableType_LOAD);
-            traffic.coef[hashit(dep_var)] = -num_items;
+            traffic.coef[lin_prog::SavyProtoHash(dep_var)] = -num_items;
           }
         }
       }
       res += traffic;
       break;
     }
-    default: { CHECK(false) << "Not an auxiliary variable!"; }
+    default: {
+      CHECK(false) << "Not an auxiliary variable!";
+    }
   }
   return aux_var_cache_[var_hash] = res;
 }
@@ -546,7 +543,7 @@ std::unique_ptr<Solution> LpSolver::Solve() {
         // wait - drone_loc <= 0;
         var_desc.set_type(lp_solver::VariableDesc_VariableType_WAIT);
         poly = minus_drone_loc;
-        poly.coef[hashit(var_desc)] += 1.0;
+        poly.coef[lin_prog::SavyProtoHash(var_desc)] += 1.0;
         {
           MPConstraint* c =
               solver.MakeRowConstraint(-inf, 0.0 - poly.coef["const"]);
@@ -568,7 +565,7 @@ std::unique_ptr<Solution> LpSolver::Solve() {
 
               poly = minus_drone_loc;
               var_desc.set_type(lp_solver::VariableDesc_VariableType_LOAD);
-              poly.coef[hashit(var_desc)] += 1.0;
+              poly.coef[lin_prog::SavyProtoHash(var_desc)] += 1.0;
               {
                 MPConstraint* c =
                     solver.MakeRowConstraint(-inf, 0.0 - poly.coef["const"]);
@@ -580,7 +577,7 @@ std::unique_ptr<Solution> LpSolver::Solve() {
 
               poly = minus_drone_loc;
               var_desc.set_type(lp_solver::VariableDesc_VariableType_UNLOAD);
-              poly.coef[hashit(var_desc)] += 1.0;
+              poly.coef[lin_prog::SavyProtoHash(var_desc)] += 1.0;
               {
                 MPConstraint* c =
                     solver.MakeRowConstraint(-inf, 0.0 - poly.coef["const"]);
@@ -604,7 +601,7 @@ std::unique_ptr<Solution> LpSolver::Solve() {
 
               poly = minus_drone_loc;
               var_desc.set_type(lp_solver::VariableDesc_VariableType_DELIVER);
-              poly.coef[hashit(var_desc)] += 1.0;
+              poly.coef[lin_prog::SavyProtoHash(var_desc)] += 1.0;
               {
                 MPConstraint* c =
                     solver.MakeRowConstraint(-inf, 0.0 - poly.coef["const"]);
@@ -633,7 +630,7 @@ std::unique_ptr<Solution> LpSolver::Solve() {
         var_desc.set_t(t);
         var_desc.set_location(loc);
         var_desc.set_type(lp_solver::VariableDesc_VariableType_WAIT);
-        c->SetCoefficient(var_access(hashit(var_desc)), 1.0);
+        c->SetCoefficient(var_access(lin_prog::SavyProtoHash(var_desc)), 1.0);
 
         auto actual_location =
             loc < problem_.nw()
@@ -657,9 +654,11 @@ std::unique_ptr<Solution> LpSolver::Solve() {
                 var_desc.set_num_items(num_items);
 
                 var_desc.set_type(lp_solver::VariableDesc_VariableType_LOAD);
-                c->SetCoefficient(var_access(hashit(var_desc)), 1.0);
+                c->SetCoefficient(var_access(lin_prog::SavyProtoHash(var_desc)),
+                                  1.0);
                 var_desc.set_type(lp_solver::VariableDesc_VariableType_UNLOAD);
-                c->SetCoefficient(var_access(hashit(var_desc)), 1.0);
+                c->SetCoefficient(var_access(lin_prog::SavyProtoHash(var_desc)),
+                                  1.0);
               }
             }
           }
@@ -680,7 +679,8 @@ std::unique_ptr<Solution> LpSolver::Solve() {
                 var_desc.set_num_items(num_items);
 
                 var_desc.set_type(lp_solver::VariableDesc_VariableType_DELIVER);
-                c->SetCoefficient(var_access(hashit(var_desc)), 1.0);
+                c->SetCoefficient(var_access(lin_prog::SavyProtoHash(var_desc)),
+                                  1.0);
               }
             }
           }

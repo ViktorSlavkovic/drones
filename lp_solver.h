@@ -6,9 +6,10 @@
 #include <unordered_map>
 #include <vector>
 
-#include "lp_solver.pb.h"
-#include "problem_solver.h"
 #include "glog/logging.h"
+#include "lp_solver.pb.h"
+#include "lp_util.h"
+#include "problem_solver.h"
 
 namespace drones {
 
@@ -19,26 +20,7 @@ class LpSolver : public ProblemSolver {
   bool CanSolve(const ProblemType& problem_type) const override { return true; }
 
  private:
-  // Polynomial consisting of the decision variables.
-  struct Polynomial {
-    std::unordered_map<std::string, double> coef;
-
-    // Overloading basic operators for the Polynomial type.
-    Polynomial& operator*=(double rhs) {
-      for (auto& p : coef) {
-        p.second *= rhs;
-      }
-      return *this;
-    }
-
-    Polynomial& operator+=(const Polynomial& rhs) {
-      for (const auto& p : rhs.coef) {
-        coef[p.first] += p.second;
-      }
-      return *this;
-    }
-  };
-
+  using Polynomial = drones::lin_prog::Polynomial;
   // Cache of auxiliary variable computations.
   using Cache = std::unordered_map<std::string, Polynomial>;
 

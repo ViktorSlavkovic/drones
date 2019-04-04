@@ -14,6 +14,7 @@ class ProblemSolver {
   explicit ProblemSolver(const Problem& problem) : problem_(problem) {}
   virtual std::unique_ptr<Solution> Solve() = 0;
   virtual bool CanSolve(const ProblemType& problem_type) const = 0;
+  virtual ~ProblemSolver() {}
  protected:
   const Problem problem_;
 };

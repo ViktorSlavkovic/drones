@@ -5,6 +5,7 @@
 #include "random_solver.h"
 #include "sp1_solver.h"
 #include "sp2_solver.h"
+#include "sp4_solver.h"
 
 namespace drones {
 
@@ -19,6 +20,8 @@ std::unique_ptr<ProblemSolver> ProblemSolverFactory::CreateSolver(
     solver = std::make_unique<Sp1Solver>(problem);
   } else if (solver_type == "sp2") {
     solver = std::make_unique<Sp2Solver>(problem);
+  } else if (solver_type == "sp4") {
+    solver = std::make_unique<Sp4Solver>(problem);
   } else {
     LOG(ERROR) << "Invalid solver type: " << solver_type;
     return nullptr;
