@@ -277,11 +277,21 @@ ProblemType ProblemManager::DetermineProblemType(const Problem &problem) {
   }
   problem_type.set_ipo_1(IPO_1);
 
+  // [product] -> num_items
+  std::map<int, int> total_required;
+  for (int o = 0; o < problem.no(); o++) {
+    for (int p = 0; p < problem.np(); p++) {
+      total_required[p] += problem.order(o).request(p);
+    }
+  }
+
   bool S0_inf = true;
   for (int warehouse = 0; warehouse < problem.nw() && S0_inf; warehouse++) {
     for (int product = 0; product < problem.np() && S0_inf; product++) {
-      S0_inf = problem.warehouse(warehouse).stock(product) ==
-               std::numeric_limits<int>::max();
+      // S0_inf = problem.warehouse(warehouse).stock(product) ==
+      //          std::numeric_limits<int>::max();
+      S0_inf = problem.warehouse(warehouse).stock(product) >=
+               total_required[product];
     }
   }
   problem_type.set_s0_inf(S0_inf);

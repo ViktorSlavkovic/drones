@@ -1,5 +1,6 @@
 #include "problem_solver_factory.h"
 
+#include "ecf_solver.h"
 #include "glog/logging.h"
 #include "lp_solver.h"
 #include "random_solver.h"
@@ -22,6 +23,8 @@ std::unique_ptr<ProblemSolver> ProblemSolverFactory::CreateSolver(
     solver = std::make_unique<Sp2Solver>(problem);
   } else if (solver_type == "sp4") {
     solver = std::make_unique<Sp4Solver>(problem);
+  } else if (solver_type == "ecf") {
+    solver = std::make_unique<EcfSolver>(problem);
   } else {
     LOG(ERROR) << "Invalid solver type: " << solver_type;
     return nullptr;

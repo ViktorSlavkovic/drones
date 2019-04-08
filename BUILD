@@ -1,3 +1,22 @@
+cc_library(
+    name = "ecf_solver",
+    srcs = ["ecf_solver.cc"],
+    hdrs = ["ecf_solver.h"],
+    linkstatic = True,
+    deps = [
+        ":lp_util",
+        ":problem_cc_proto",
+        ":problem_solver",
+        ":solution_cc_proto",
+        ":sp4_solver_cc_proto",
+        "@com_github_glog_glog//:glog",
+        "@com_google_absl//absl/strings",
+        "@third_party_ortools//ortools/base",
+        "@third_party_ortools//ortools/linear_solver",
+        "@third_party_ortools//ortools/linear_solver:linear_solver_cc_proto",
+    ],
+)
+
 cc_binary(
     name = "sp4_main",
     srcs = ["sp4_main.cc"],
@@ -161,6 +180,7 @@ cc_library(
     hdrs = ["problem_solver_factory.h"],
     linkstatic = True,
     deps = [
+        ":ecf_solver",
         ":lp_solver",
         ":problem_solver",
         ":random_solver",
