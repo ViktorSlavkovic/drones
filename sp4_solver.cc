@@ -271,7 +271,7 @@ Sp4Solver::Alloc Sp4Solver::Allocate() const {
     }
     objective->SetMinimization();
   }
-  
+
   // Generate constraints.
   // (1) Can't take more from a warehouse then there's in it.
   LOG(INFO) << "Allocate(): Generating warehouse per-product constraints.";
@@ -346,6 +346,7 @@ Sp4Solver::Alloc Sp4Solver::Allocate() const {
           CHECK(warehouse_provides >= 0);
           warehouse_balance[warehouse][product] -= warehouse_provides;
           order_balance[order][product] -= warehouse_provides;
+          if (warehouse_provides == 0) continue;
           res[order][std::make_pair(warehouse, product)] = warehouse_provides;
         }
       }
@@ -400,11 +401,13 @@ Sp4Solver::Alloc Sp4Solver::Allocate() const {
           std::pop_heap(dist_warehouse.begin(), dist_warehouse.end());
           int w = dist_warehouse.back().second;
           dist_warehouse.pop_back();
-          int give_back = std::min(res[o][std::make_pair(w, p)], -order_balance[o][p]);
-          res[o][std::make_pair(w, p)] -= give_back;
+          int give_back =
+              std::min(res[o][std::make_pair(w, p)], -order_balance[o][p]);
+          auto wp = std::make_pair(w, p);
+          CHECK(res[o][wp] >= give_back);
+          if ((res[o][wp] -= give_back) == 0) res[o].erase(wp);
           warehouse_balance[w][p] += give_back;
           order_balance[o][p] += give_back;
-          CHECK((res[o][std::make_pair(w, p)] >= 0));
         }
       }
     }
@@ -444,9 +447,11 @@ Sp4Solver::Alloc Sp4Solver::Allocate() const {
           std::pop_heap(dist_order.begin(), dist_order.end());
           int o = dist_order.back().second;
           dist_order.pop_back();
-          int take_back = std::min(res[o][std::make_pair(w, p)], -warehouse_balance[w][p]);
-          res[o][std::make_pair(w, p)] -= take_back;
-          CHECK((res[o][std::make_pair(w, p)] >= 0));
+          int take_back =
+              std::min(res[o][std::make_pair(w, p)], -warehouse_balance[w][p]);
+          auto wp = std::make_pair(w, p);
+          CHECK(res[o][wp] >= take_back);
+          if ((res[o][wp] -= take_back) == 0) res[o].erase(wp);
           warehouse_balance[w][p] += take_back;
           order_balance[o][p] += take_back;
         }
@@ -466,7 +471,7 @@ Sp4Solver::Alloc Sp4Solver::Allocate() const {
     for (int o = 1; o < problem_.no(); o++) {
       std::swap(order_perm[o], order_perm[rand_eng() % o]);
     }
-    
+
     // Take.
     auto gt = std::greater<std::pair<int, int>>();
     std::vector<std::pair<int, int>> dist_warehouse;
@@ -489,8 +494,10 @@ Sp4Solver::Alloc Sp4Solver::Allocate() const {
           int w = dist_warehouse.back().second;
           dist_warehouse.pop_back();
           int take = std::min(warehouse_balance[w][p], order_balance[o][p]);
-          res[o][std::make_pair(w, p)] += take;
-          CHECK((res[o][std::make_pair(w, p)] >= 0));
+          if (take == 0) continue;
+          auto wp = std::make_pair(w, p);
+          res[o][wp] += take;
+          CHECK(res[o][wp] >= 0);
           warehouse_balance[w][p] -= take;
           order_balance[o][p] -= take;
         }
@@ -515,7 +522,7 @@ bool Sp4Solver::VerifyAlloc(const Sp4Solver::Alloc& alloc) const {
         if (problem_.warehouse(w).stock(p) == 0) continue;
         if (alloc[o].count(std::make_pair(w, p)) == 0) continue;
         int warehouse_provides = alloc[o].at(std::make_pair(w, p));
-        CHECK(warehouse_provides >= 0);
+        CHECK(warehouse_provides > 0);
         warehouse_balance[w][p] -= warehouse_provides;
         order_balance[o][p] -= warehouse_provides;
       }

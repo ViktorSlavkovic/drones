@@ -98,7 +98,7 @@ std::unique_ptr<Solution> EcfSolver::Solve() {
     // [warehouse][product] -> num_items
     std::map<int, std::map<int, int>> pending_warehouses;
     for (const auto& wp_items : alloc[o]) {
-      if (wp_items.second <= 0) continue;
+      CHECK(wp_items.second > 0);
       pending_warehouses[wp_items.first.first][wp_items.first.second] +=
           wp_items.second;
     }
@@ -236,6 +236,7 @@ std::unique_ptr<Solution> EcfSolver::Solve() {
                  problem_.warehouse(best_w).location().y();
         int dist = ceil(sqrt(dx * dx + dy * dy));
         for (const auto& pi : knapsack_taken[problem_.m()]) {
+          if (pi.second < 1) continue;
           num_drone_commands[best_d]++;
           auto* cmd = solution->mutable_drone_desc(best_d)->add_drone_command();
           cmd->set_drone_id(best_d);
@@ -262,6 +263,7 @@ std::unique_ptr<Solution> EcfSolver::Solve() {
                  problem_.warehouse(best_w).location().y();
         int dist = ceil(sqrt(dx * dx + dy * dy));
         for (const auto& pi : knapsack_taken[problem_.m()]) {
+          if (pi.second < 1) continue;
           num_drone_commands[best_d]++;
           auto* cmd = solution->mutable_drone_desc(best_d)->add_drone_command();
           cmd->set_drone_id(best_d);
@@ -414,6 +416,7 @@ EcfSolver::Alloc EcfSolver::Allocate() const {
           CHECK(warehouse_provides >= 0);
           warehouse_balance[warehouse][product] -= warehouse_provides;
           order_balance[order][product] -= warehouse_provides;
+          if (warehouse_provides == 0) continue;
           res[order][std::make_pair(warehouse, product)] = warehouse_provides;
         }
       }
@@ -470,10 +473,11 @@ EcfSolver::Alloc EcfSolver::Allocate() const {
           dist_warehouse.pop_back();
           int give_back =
               std::min(res[o][std::make_pair(w, p)], -order_balance[o][p]);
-          res[o][std::make_pair(w, p)] -= give_back;
+          auto wp = std::make_pair(w, p);
+          CHECK(res[o][wp] >= give_back);
+          if ((res[o][wp] -= give_back) == 0) res[o].erase(wp);
           warehouse_balance[w][p] += give_back;
           order_balance[o][p] += give_back;
-          CHECK((res[o][std::make_pair(w, p)] >= 0));
         }
       }
     }
@@ -515,8 +519,9 @@ EcfSolver::Alloc EcfSolver::Allocate() const {
           dist_order.pop_back();
           int take_back =
               std::min(res[o][std::make_pair(w, p)], -warehouse_balance[w][p]);
-          res[o][std::make_pair(w, p)] -= take_back;
-          CHECK((res[o][std::make_pair(w, p)] >= 0));
+          auto wp = std::make_pair(w, p);
+          CHECK(res[o][wp] >= take_back);
+          if ((res[o][wp] -= take_back) == 0) res[o].erase(wp);
           warehouse_balance[w][p] += take_back;
           order_balance[o][p] += take_back;
         }
@@ -559,8 +564,10 @@ EcfSolver::Alloc EcfSolver::Allocate() const {
           int w = dist_warehouse.back().second;
           dist_warehouse.pop_back();
           int take = std::min(warehouse_balance[w][p], order_balance[o][p]);
-          res[o][std::make_pair(w, p)] += take;
-          CHECK((res[o][std::make_pair(w, p)] >= 0));
+          if (take == 0) continue;
+          auto wp = std::make_pair(w, p);
+          res[o][wp] += take;
+          CHECK(res[o][wp] >= 0);
           warehouse_balance[w][p] -= take;
           order_balance[o][p] -= take;
         }
@@ -585,7 +592,7 @@ bool EcfSolver::VerifyAlloc(const EcfSolver::Alloc& alloc) const {
         if (problem_.warehouse(w).stock(p) == 0) continue;
         if (alloc[o].count(std::make_pair(w, p)) == 0) continue;
         int warehouse_provides = alloc[o].at(std::make_pair(w, p));
-        CHECK(warehouse_provides >= 0);
+        CHECK(warehouse_provides > 0);
         warehouse_balance[w][p] -= warehouse_provides;
         order_balance[o][p] -= warehouse_provides;
       }
