@@ -11,7 +11,8 @@ git_repository(
     name="third_party_ortools",
     remote="https://github.com/google/or-tools.git",
     # branch="master",
-    commit="c4aaa4321d270d5d1a32ed8948ef565dca2ee3ff",
+    #commit="c4aaa4321d270d5d1a32ed8948ef565dca2ee3ff",
+    commit="39f44709bba203f5ff3bc18fab8098739f189a6d",
 )
 
 git_repository(
@@ -23,7 +24,8 @@ git_repository(
 git_repository(
     name = "com_google_absl",
     remote = "https://github.com/abseil/abseil-cpp.git",
-    commit = "7c7754fb3ed9ffb57d35fe8658f3ba4d73a31e72",
+#    commit = "7c7754fb3ed9ffb57d35fe8658f3ba4d73a31e72",
+    commit = "a02f62f456f2c4a7ecf2be3104fe0c6e16fbad9a",
 )
 
 git_repository(
@@ -40,14 +42,18 @@ git_repository(
 
 http_archive(
     name = "com_google_protobuf",
-    urls = ["https://github.com/google/protobuf/archive/b68a347f56137b4b1a746e8c7438495a6ac1bd91.zip"],
-    strip_prefix = "protobuf-b68a347f56137b4b1a746e8c7438495a6ac1bd91",
+    urls = ["https://github.com/google/protobuf/archive/8e5ea65953f3c47e01bca360ecf3abdf2c8b1c33.zip"],
+    strip_prefix = "protobuf-8e5ea65953f3c47e01bca360ecf3abdf2c8b1c33",
+#    urls = ["https://github.com/google/protobuf/archive/b68a347f56137b4b1a746e8c7438495a6ac1bd91.zip"],
+#    strip_prefix = "protobuf-b68a347f56137b4b1a746e8c7438495a6ac1bd91",
 )
 
 http_archive(
     name = "com_google_protobuf_cc",
-    urls = ["https://github.com/google/protobuf/archive/b68a347f56137b4b1a746e8c7438495a6ac1bd91.zip"],
-    strip_prefix = "protobuf-b68a347f56137b4b1a746e8c7438495a6ac1bd91",
+    urls = ["https://github.com/google/protobuf/archive/8e5ea65953f3c47e01bca360ecf3abdf2c8b1c33.zip"],
+    strip_prefix = "protobuf-8e5ea65953f3c47e01bca360ecf3abdf2c8b1c33",
+#    urls = ["https://github.com/google/protobuf/archive/b68a347f56137b4b1a746e8c7438495a6ac1bd91.zip"],
+#    strip_prefix = "protobuf-b68a347f56137b4b1a746e8c7438495a6ac1bd91",
 )
 
 git_repository(
