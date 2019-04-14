@@ -105,3 +105,32 @@ bind(
     name = "zlib",
     actual = "@net_zlib//:zlib",
 )
+
+###############################################################################
+# Python stuff
+###############################################################################
+
+git_repository(
+    name = "subpar",
+    remote = "https://github.com/google/subpar",
+    commit = "0356bef3fbbabec5f0e196ecfacdeb6db62d48c0",
+)
+
+git_repository(
+    name = "io_bazel_rules_python",
+    remote = "https://github.com/bazelbuild/rules_python.git",
+    commit = "fa6ab781188972aa2710310b29a9bccaae7fd7fe",
+)
+
+load("@io_bazel_rules_python//python:pip.bzl", "pip_repositories")
+pip_repositories()
+
+load("@io_bazel_rules_python//python:pip.bzl", "pip_import")
+pip_import(
+   name = "external_python_deps",
+   requirements = "//:.python_external_deps",
+)
+
+load("@external_python_deps//:requirements.bzl", "pip_install")
+pip_install()
+

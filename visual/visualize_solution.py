@@ -1,5 +1,4 @@
 #!/usr/bin/python
-from __future__ import print_function
 
 import math
 import sys
@@ -7,8 +6,15 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as ani
 import sys
 
-def eprint(*args, **kwargs):
-    print(*args, file=sys.stderr, **kwargs)
+from absl import app
+from absl import flags
+from absl import logging
+
+FLAGS = flags.FLAGS
+flags.DEFINE_string('problem_file', '', 'The problem file path.')
+flags.DEFINE_string('solution_file', '', 'The solution file path.')
+flags.DEFINE_bool('just_calc', False, 'Do not plot not animate, just simulate '
+                                      'and calculate the score.')
 
 W = 0
 H = 0
@@ -40,7 +46,7 @@ def load_problem(file_path):
   global order_loc_x, order_loc_y, order_request, order_done
   global drone_loc_x, drone_loc_y
 
-  print("Loading problem from: %s" % file_path)
+  logging.info("Loading problem from: %s" % file_path)
   
   with open(file_path, "r") as fin:
     W, H, Nd, T, M = [int(x) for x in next(fin).split()]
@@ -89,18 +95,18 @@ def load_problem(file_path):
   drone_loc_x = [warehouse_loc_x[0] for d in range(Nd)]
   drone_loc_y = [warehouse_loc_y[0] for d in range(Nd)]
 
-  print("Loading done.")
+  logging.info("Loading done.")
 
 def load_solution(file_path):
   global drone_commands
 
-  print("Loading solution from: %s" % file_path)
+  logging.info("Loading solution from: %s" % file_path)
 
   drone_commands = [[] for d in range(Nd)]
   with open(file_path, "r") as fin:
     Q = int(next(fin).split()[0])
     assert 0 <= Q <= Nd * T
-    print('Loading %d commands.' % Q)
+    logging.info('Loading %d commands.' % Q)
     for q in range(Q):
       cmd_line = next(fin).split()
       assert 0 <= int(cmd_line[0]) < Nd
@@ -126,7 +132,7 @@ def load_solution(file_path):
 
       drone_commands[int(cmd_line[0])].append(cmd)
   
-  print("Loading done.")
+  logging.info("Loading done.")
 
 drone_schedule = set()
 unload_schedule = set()
@@ -154,7 +160,7 @@ def simulate_step(tick):
   if last_simulation_step >= tick: return
   last_simulation_step = tick
   
-  # print('simulate_step(%d)' % tick)
+  # logging.info('simulate_step(%d)' % tick)
   assert tick < T
 
   global drone_loc_x, drone_loc_y
@@ -256,7 +262,7 @@ def simulate_step(tick):
     order_done[o] = (sum(order_request[o]) == 0)
     if order_done[o]:
       pts = math.ceil((T - tick) * 100.0 / T)
-      print('Order %d completed at: %d -> %d' % (o, tick, pts))
+      logging.info('Order %d completed at: %d -> %d' % (o, tick, pts))
       total_points += pts
 
   delivery_schedule.difference_update(delivery_schedule_remove)
@@ -287,19 +293,12 @@ def animate(frame):
   plot_lines[4].set_data(drone_plot_loc_x, drone_plot_loc_y)
   return plot_lines
 
-def main():
-  if not len(sys.argv) in range(3, 4 + 1):
-    print("Usage: ./visualize_solution.py <problem_file_path> <solution_file_path> [--just_calc]")
-    sys.exit(-1)
-  load_problem(sys.argv[1])
-
-  print('T = %d' % T)
-
-  load_solution(sys.argv[2])
-
+def main(argv):
+  load_problem(FLAGS.problem_file)
+  load_solution(FLAGS.solution_file)
   init_simulation()
 
-  if len(sys.argv) == 4 and sys.argv[3] == '--just_calc':
+  if FLAGS.just_calc:
     for tick in range(T): simulate_step(tick)
   else:
     fig = plt.figure()
@@ -323,8 +322,8 @@ def main():
 
     plt.show()
   
-  print('TOTAL POINTS = %d' % total_points)
+  logging.info('TOTAL POINTS = %d' % total_points)
 
 if __name__== "__main__":
-  main()
+  app.run(main)
 

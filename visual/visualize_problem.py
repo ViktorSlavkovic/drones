@@ -4,6 +4,13 @@ import math
 import sys
 import matplotlib.pyplot as plt
 
+from absl import app
+from absl import flags
+from absl import logging
+
+FLAGS = flags.FLAGS
+flags.DEFINE_string('problem_file', '', 'The problem file path.')
+
 W = 0
 H = 0
 Nd = 0
@@ -17,7 +24,6 @@ warehouse_loc_x = []
 warehouse_loc_y = []
 warehouse_stock = []
 warehouse_empty = []
-product_weight = []
 order_loc_x = []
 order_loc_y = []
 order_request = []
@@ -30,9 +36,8 @@ def load_problem(file_path):
   global W, H, Nd, Np, Nw, No, T, M
   global warehouse_loc_x, warehouse_loc_y, warehouse_stock, warehouse_empty
   global order_loc_x, order_loc_y, order_request, order_done
-  global product_weight
 
-  print("Loading from: %s" % file_path)
+  logging.info("Loading from: %s" % file_path)
   
   with open(file_path, "r") as fin:
     W, H, Nd, T, M = [int(x) for x in next(fin).split()]
@@ -57,7 +62,7 @@ def load_problem(file_path):
       order_request.append(curr_order_request)
       order_done.append(False)
   
-  print("Loading done.")
+  logging.info("Loading done.")
 
 def print_warehouse(w):
     fig = plt.gcf()
@@ -169,13 +174,10 @@ def problem_plot():
   
   plt.show()
 
-def main():
-  if (len(sys.argv) != 2):
-    print("Usage: ./visualize_problem.py <problem_file_path>")
-    sys.exit(-1)
-  load_problem(sys.argv[1])
+def main(argv):
+  load_problem(FLAGS.problem_file)
   problem_plot()
 
 if __name__== "__main__":
-  main()
+  app.run(main)
 
