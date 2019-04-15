@@ -4,7 +4,8 @@ import math
 import sys
 import matplotlib.pyplot as plt
 import matplotlib.animation as ani
-import sys
+
+from typing import Dict, List, Tuple
 
 from absl import app
 from absl import flags
@@ -13,317 +14,275 @@ from absl import logging
 FLAGS = flags.FLAGS
 flags.DEFINE_string('problem_file', '', 'The problem file path.')
 flags.DEFINE_string('solution_file', '', 'The solution file path.')
-flags.DEFINE_bool('just_calc', False, 'Do not plot not animate, just simulate '
-                                      'and calculate the score.')
+flags.DEFINE_bool(
+    'just_calc', False, 'Do not plot not animate, just simulate '
+    'and calculate the score.')
+flags.DEFINE_bool('show_anim', True,
+                  'Show animation, unless just_calc flag is set.')
+flags.DEFINE_string(
+    'anim_video_file', '', 'Save animation to a video file, unless show_anim '
+    'flag is set or this flag is an empty string.')
+flags.DEFINE_integer(
+    'anim_video_fps', 100, 'Valid only if the animation is being saved to a '
+    'video file.')
+flags.DEFINE_integer(
+    'anim_frames', -1, 'Number of frames to animate, if any animation is '
+    'happening and it is >= 0, otherwise the problem\'s T is used')
 
-W = 0
-H = 0
-Nd = 0
-Np = 0
-Nw = 0
-No = 0
-T = 0
-M = 0
 
-warehouse_loc_x = []
-warehouse_loc_y = []
-warehouse_stock = []
-warehouse_empty = []
-order_loc_x = []
-order_loc_y = []
-order_request = []
-order_done = []
-drone_loc_x = []
-drone_loc_y = []
-drone_commands = []
+class ProblemSolution:
+    def __init__(self, problem_path: str, solution_path: str):
+        logging.info(f'Loading problem from: {problem_path}')
+        with open(problem_path, 'r') as fin:
+            _, _, self.nd, self.t, self.m = [int(x) for x in next(fin).split()]
+            self.np = int(next(fin).split()[0])
+            self.product_weight = [int(x) for x in next(fin).split()]
+            self.nw = int(next(fin).split()[0])
+            self.warehouse_loc = []
+            self.warehouse_stock = []
+            for w in range(self.nw):
+                x, y = [int(x) for x in next(fin).split()]
+                self.warehouse_loc.append((x, y))
+                self.warehouse_stock.append(
+                    [int(x) for x in next(fin).split()])
+            self.no = int(next(fin).split()[0])
+            self.order_loc = []
+            self.order_request = []
+            for o in range(self.no):
+                x, y = [int(x) for x in next(fin).split()]
+                self.order_loc.append((x, y))
+                # Eat one line - the one containing # of product items
+                next(fin)
+                curr_order_request = [0 for _ in range(self.np)]
+                for x in next(fin).split():
+                    curr_order_request[int(x)] += 1
+                self.order_request.append(curr_order_request)
+        logging.info('Loading done.')
 
-plot_lines = []
-total_points = 0.0
+        logging.info(f'Loading solution from: {solution_path}')
+        with open(solution_path, 'r') as fin:
+            self.drone_commands = [[] for _ in range(self.nd)]
+            Q = int(next(fin).split()[0])
+            logging.info(f'Loading {Q} commands.')
+            for _ in range(Q):
+                cmd_line = next(fin).split()
+                cmd = {'type': cmd_line[1]}
+                if cmd_line[1] in ['L', 'U']:
+                    cmd['warehouse'] = int(cmd_line[2])
+                    cmd['product'] = int(cmd_line[3])
+                    cmd['num_items'] = int(cmd_line[4])
+                elif cmd_line[1] == 'D':
+                    cmd['order'] = int(cmd_line[2])
+                    cmd['product'] = int(cmd_line[3])
+                    cmd['num_items'] = int(cmd_line[4])
+                else:
+                    cmd['duration'] = int(cmd_line[2])
+                self.drone_commands[int(cmd_line[0])].append(cmd)
+        logging.info('Loading done')
 
-def load_problem(file_path):
-  global W, H, Nd, Np, Nw, No, T, M
-  global warehouse_loc_x, warehouse_loc_y, warehouse_stock, warehouse_empty
-  global order_loc_x, order_loc_y, order_request, order_done
-  global drone_loc_x, drone_loc_y
 
-  logging.info("Loading problem from: %s" % file_path)
-  
-  with open(file_path, "r") as fin:
-    W, H, Nd, T, M = [int(x) for x in next(fin).split()]
-    assert 1 <= W <= 100000
-    assert 1 <= H <= 100000
-    assert 1 <= Nd <= 1000
-    assert 1 <= T <= 1000000
-    assert 1 <= M <= 10000
+class Simulation:
+    def __init__(self, problem_solution: ProblemSolution):
+        self.problem_solution = problem_solution
+        self._drone_schedule = set()
+        self._unload_schedule = set()
+        self._delivery_schedule = set()
+        self.warehouse_empty = [False for _ in range(problem_solution.nw)]
+        self.order_done = [False for _ in range(problem_solution.no)]
+        self.drone_loc = []
+        self.drone_travel = []
+        for d in range(problem_solution.nd):
+            self._drone_schedule.add((0, d))
+            self.drone_loc.append(problem_solution.warehouse_loc[0])
+            self.drone_travel.append({'s': -100, 'd': 0})
+        self.last_tick = -1
+        self.total_points = 0.0
 
-    Np = int(next(fin).split()[0])
-    assert 1 <= Np <= 10000
-    product_weight = [int(x) for x in next(fin).split()]
-    for pw in product_weight: assert 1 <= pw <= M
+    def _command_duration(self, d: int, cmd):
+        ps = self.problem_solution
+        if cmd['type'] == 'W': return cmd['duration']
+        src = ps.order_loc[
+            cmd['order']] if cmd['type'] == 'D' else ps.warehouse_loc[
+                cmd['warehouse']]
+        dx = src[0] - self.drone_loc[d][0]
+        dy = src[1] - self.drone_loc[d][1]
+        return 1 + math.ceil(math.sqrt(dx * dx + dy * dy))
 
-    Nw = int(next(fin).split()[0])
-    assert 1 <= Nw <= 10000
-    for w in range(Nw):
-      x, y = [int(x) for x in next(fin).split()]
-      assert 0 <= x < W
-      assert 0 <= y < H
-      warehouse_loc_x.append(x)
-      warehouse_loc_y.append(y)
-      stock = [int(x) for x in next(fin).split()] 
-      for p in stock: assert 0 <= p <= 10000
-      warehouse_stock.append(stock)
-      warehouse_empty.append(sum(stock) == 0)
+    def simulate_step(self, tick):
+        if self.last_tick >= tick: return
+        self.last_tick = tick
 
-    No = int(next(fin).split()[0])
-    assert 1 <= No <= 10000
-    for o in range(No):
-      x, y = [int(x) for x in next(fin).split()]
-      assert 0 <= x < W
-      assert 0 <= y < H
-      order_loc_x.append(x)
-      order_loc_y.append(y)
-      next(fin)  # Eat one line - the one containing # of product items
-      curr_order_request = [0 for x in range(Np)]
-      for x in next(fin).split():
-        p = int(x)
-        assert 0 <= p < Np
-        curr_order_request[p] += 1 
-      order_request.append(curr_order_request)
-      assert(sum(curr_order_request) > 0)
-      order_done.append(False)
+        ps = self.problem_solution
 
-  drone_loc_x = [warehouse_loc_x[0] for d in range(Nd)]
-  drone_loc_y = [warehouse_loc_y[0] for d in range(Nd)]
+        # (1) Handle drones.
+        drone_schedule_add = set()
+        drone_schedule_remove = set()
+        for event in self._drone_schedule:
+            if not event[0] == tick: continue
+            drone_schedule_remove.add(event)
 
-  logging.info("Loading done.")
+            d = event[1]
+            if len(ps.drone_commands[d]) == 0: continue
+            cmd = ps.drone_commands[d][0]
+            ps.drone_commands[d] = ps.drone_commands[d][1:]
 
-def load_solution(file_path):
-  global drone_commands
+            cmd_duration = self._command_duration(d, cmd)
+            finish_time = tick + cmd_duration - 1
+            if finish_time < ps.t - 1:
+                drone_schedule_add.add((finish_time + 1, d))
 
-  logging.info("Loading solution from: %s" % file_path)
+            if cmd['type'] in ['L', 'U']:
+                w = cmd['warehouse']
+                p = cmd['product']
+                n = cmd['num_items']
+                if cmd['type'] == 'L':
+                    ps.warehouse_stock[w][p] -= n
+                    self.warehouse_empty[w] = (sum(ps.warehouse_stock[w]) == 0)
+                else:
+                    self._unload_schedule.add((finish_time, w, p, n, d))
+                travel_time = cmd_duration - 1
+                if travel_time > 0:
+                    self.drone_travel[d]['s'] = tick
+                    self.drone_travel[d]['d'] = travel_time
+                    self.drone_travel[d]['fx'] = self.drone_loc[d][0]
+                    self.drone_travel[d]['fy'] = self.drone_loc[d][1]
+                    self.drone_travel[d]['tx'] = ps.warehouse_loc[w][0]
+                    self.drone_travel[d]['ty'] = ps.warehouse_loc[w][1]
+                self.drone_loc[d] = ps.warehouse_loc[w]
+            elif cmd['type'] == 'D':
+                o = cmd['order']
+                p = cmd['product']
+                n = cmd['num_items']
+                self._delivery_schedule.add((finish_time, o, p, n, d))
+                travel_time = cmd_duration - 1
+                if travel_time > 0:
+                    self.drone_travel[d]['s'] = tick
+                    self.drone_travel[d]['d'] = travel_time
+                    self.drone_travel[d]['fx'] = self.drone_loc[d][0]
+                    self.drone_travel[d]['fy'] = self.drone_loc[d][1]
+                    self.drone_travel[d]['tx'] = ps.order_loc[o][0]
+                    self.drone_travel[d]['ty'] = ps.order_loc[o][1]
+                self.drone_loc[d] = ps.order_loc[o]
 
-  drone_commands = [[] for d in range(Nd)]
-  with open(file_path, "r") as fin:
-    Q = int(next(fin).split()[0])
-    assert 0 <= Q <= Nd * T
-    logging.info('Loading %d commands.' % Q)
-    for q in range(Q):
-      cmd_line = next(fin).split()
-      assert 0 <= int(cmd_line[0]) < Nd
-      cmd = { 'type' : cmd_line[1] }
-      assert cmd['type'] in ['L', 'U', 'D', 'W']
-      if cmd_line[1] in ['L', 'U']:
-        cmd['warehouse'] = int(cmd_line[2])
-        assert(0 <= cmd['warehouse'] < Nw)
-        cmd['product'] = int(cmd_line[3])
-        assert(0 <= cmd['product'] < Np)
-        cmd['num_items'] = int(cmd_line[4])
-        assert(1 <= cmd['num_items'])
-      elif cmd_line[1] == 'D':
-        cmd['order'] = int(cmd_line[2])
-        assert(0 <= cmd['order'] < No)
-        cmd['product'] = int(cmd_line[3])
-        assert(0 <= cmd['product'] < Np)
-        cmd['num_items'] = int(cmd_line[4])
-        assert(1 <= cmd['num_items'])
-      else:
-        cmd['duration'] = int(cmd_line[2])
-        assert(1 <= cmd['duration'] <= T)
+        self._drone_schedule.difference_update(drone_schedule_remove)
+        self._drone_schedule.update(drone_schedule_add)
 
-      drone_commands[int(cmd_line[0])].append(cmd)
-  
-  logging.info("Loading done.")
+        # (2) Handle unload.
+        unload_schedule_remove = set()
+        for event in self._unload_schedule:
+            if not event[0] == tick: continue
+            unload_schedule_remove.add(event)
+            w = event[1]
+            p = event[2]
+            n = event[3]
+            ps.warehouse_stock[w][p] += n
+            ps.warehouse_empty[w] = (sum(ps.warehouse_stock[w] == 0))
 
-drone_schedule = set()
-unload_schedule = set()
-delivery_schedule = set()
-drone_plot_loc_x = []
-drone_plot_loc_y = []
-drone_travel = []
+        self._unload_schedule.difference_update(unload_schedule_remove)
 
-def init_simulation():
-  global drone_schedule
-  global drone_travel
-  for d in range(Nd):
-    drone_schedule.add((0, d))
-  drone_travel = [{'s': -1, 'd': 0} for d in range(Nd)]
+        # (3) Handle delivery.
+        delivery_schedule_remove = set()
+        for event in self._delivery_schedule:
+            if not event[0] == tick: continue
+            delivery_schedule_remove.add(event)
+            o = event[1]
+            p = event[2]
+            n = event[3]
+            ps.order_request[o][p] -= n
+            self.order_done[o] = (sum(ps.order_request[o]) == 0)
+            if self.order_done[o]:
+                pts = math.ceil((ps.t - tick) * 100.0 / ps.t)
+                logging.info(f'Order {o} completed at: {tick} -> {pts}')
+                self.total_points += pts
 
-def command_duration(d, cmd):
-  if cmd['type'] == 'W': return cmd['duration']
-  dx = (order_loc_x[cmd['order']] if cmd['type'] == 'D' else warehouse_loc_x[cmd['warehouse']]) - drone_loc_x[d]
-  dy = (order_loc_y[cmd['order']] if cmd['type'] == 'D' else warehouse_loc_y[cmd['warehouse']]) - drone_loc_y[d]
-  return 1 + math.ceil(math.sqrt(dx * dx + dy * dy))
+        self._delivery_schedule.difference_update(delivery_schedule_remove)
 
-last_simulation_step = -1
-def simulate_step(tick):
-  global last_simulation_step
-  if last_simulation_step >= tick: return
-  last_simulation_step = tick
-  
-  # logging.info('simulate_step(%d)' % tick)
-  assert tick < T
 
-  global drone_loc_x, drone_loc_y
-  global warehouse_empty, warehouse_stock, warehouse_loc_x, warehouse_loc_y
-  global order_done, order_request, order_loc_x, order_loc_y
-  global total_points
-  global drone_schedule, unload_schedule, delivery_schedule
-  global drone_travel
-  global drone_plot_loc_x, drone_plot_loc_y
+def calc_plot_data(sim: Simulation):
+    wx = []
+    wy = []
+    ewx = []
+    ewy = []
+    for w in range(sim.problem_solution.nw):
+        x, y = sim.problem_solution.warehouse_loc[w]
+        wx.append(x)
+        wy.append(y)
+        if sim.warehouse_empty[w]:
+            ewx.append(x)
+            ewy.append(y)
+    ox = []
+    oy = []
+    dox = []
+    doy = []
+    for o in range(sim.problem_solution.no):
+        x, y = sim.problem_solution.order_loc[o]
+        ox.append(x)
+        oy.append(y)
+        if sim.order_done[o]:
+            dox.append(x)
+            doy.append(y)
 
-  # (1) Handle drones.
-  drone_schedule_add = set()
-  drone_schedule_remove = set()
-  for event in drone_schedule:
-    if not event[0] == tick: continue
-    drone_schedule_remove.add(event)
-    
-    d = event[1]
-    if len(drone_commands[d]) == 0: continue
-    cmd = drone_commands[d][0]
-    drone_commands[d] = drone_commands[d][1:]
-    
-    cmd_duration = command_duration(d, cmd)
-    finish_time = tick + cmd_duration - 1
-    if finish_time < T - 1: drone_schedule_add.add((finish_time + 1, d))
-    
-    if cmd['type'] == 'L':
-      w = cmd['warehouse']
-      p = cmd['product']
-      n = cmd['num_items']
-      warehouse_stock[w][p] -= n
-      warehouse_empty[w] = (sum(warehouse_stock[w]) == 0)
-      travel_time = cmd_duration - 1
-      if travel_time > 0:
-        drone_travel[d]['s'] = tick
-        drone_travel[d]['d'] = travel_time
-        drone_travel[d]['fx'] = drone_loc_x[d]
-        drone_travel[d]['fy'] = drone_loc_y[d]
-        drone_travel[d]['tx'] = warehouse_loc_x[w]
-        drone_travel[d]['ty'] = warehouse_loc_y[w]
-      drone_loc_x[d] = warehouse_loc_x[w]
-      drone_loc_y[d] = warehouse_loc_y[w]
-    elif cmd['type'] == 'U':
-      w = cmd['warehouse']
-      p = cmd['product']
-      n = cmd['num_items']
-      unload_schedule.add((finish_time, w, p, n, d))
-      travel_time = cmd_duration - 1
-      if travel_time > 0:
-        drone_travel[d]['s'] = tick
-        drone_travel[d]['d'] = travel_time
-        drone_travel[d]['fx'] = drone_loc_x[d]
-        drone_travel[d]['fy'] = drone_loc_y[d]
-        drone_travel[d]['tx'] = warehouse_loc_x[w]
-        drone_travel[d]['ty'] = warehouse_loc_y[w]
-      drone_loc_x[d] = warehouse_loc_x[w]
-      drone_loc_y[d] = warehouse_loc_y[w]
-    elif cmd['type'] == 'D':
-      o = cmd['order']
-      p = cmd['product']
-      n = cmd['num_items']
-      delivery_schedule.add((finish_time, o, p, n, d))
-      travel_time = cmd_duration - 1
-      if travel_time > 0:
-        drone_travel[d]['s'] = tick
-        drone_travel[d]['d'] = travel_time
-        drone_travel[d]['fx'] = drone_loc_x[d]
-        drone_travel[d]['fy'] = drone_loc_y[d]
-        drone_travel[d]['tx'] = order_loc_x[o]
-        drone_travel[d]['ty'] = order_loc_y[o]
-      drone_loc_x[d] = order_loc_x[o]
-      drone_loc_y[d] = order_loc_y[o]
+    dx = []
+    dy = []
+    for d in range(sim.problem_solution.nd):
+        ts = sim.drone_travel[d]['s']
+        te = sim.drone_travel[d]['s'] + sim.drone_travel[d]['d'] - 1
+        if ts <= sim.last_tick <= te:
+            dt = sim.last_tick - ts
+            delta_x = sim.drone_travel[d]['tx'] - sim.drone_travel[d]['fx']
+            delta_y = sim.drone_travel[d]['ty'] - sim.drone_travel[d]['fy']
+            plot_x = sim.drone_travel[d][
+                'fx'] + dt * delta_x / sim.drone_travel[d]['d']
+            plot_y = sim.drone_travel[d][
+                'fy'] + dt * delta_y / sim.drone_travel[d]['d']
+            dx.append(plot_x)
+            dy.append(plot_y)
+        else:
+            dx.append(sim.drone_loc[d][0])
+            dy.append(sim.drone_loc[d][1])
 
-  drone_schedule.difference_update(drone_schedule_remove)
-  drone_schedule.update(drone_schedule_add)
-  
-  # (2) Handle unload.
-  unload_schedule_remove = set()
-  for event in unload_schedule:
-    if not event[0] == tick: continue
-    unload_schedule_remove.add(event)
-    w = event[1]
-    p = event[2]
-    n = event[3]
-    warehouse_stock[w][p] += n
-    warehouse_empty[w] = (sum(warehouse_stock[w] == 0))
+    return wx, wy, ewx, ewy, ox, oy, dox, doy, dx, dy
 
-  unload_schedule.difference_update(unload_schedule_remove)
-
-  # (3) Handle delivery.
-  delivery_schedule_remove = set()
-  for event in delivery_schedule:
-    if not event[0] == tick: continue
-    delivery_schedule_remove.add(event)
-    o = event[1]
-    p = event[2]
-    n = event[3]
-    order_request[o][p] -= n
-    order_done[o] = (sum(order_request[o]) == 0)
-    if order_done[o]:
-      pts = math.ceil((T - tick) * 100.0 / T)
-      logging.info('Order %d completed at: %d -> %d' % (o, tick, pts))
-      total_points += pts
-
-  delivery_schedule.difference_update(delivery_schedule_remove)
-
-  # (4) Calculate drone plot locations
-  drone_plot_loc_x = []
-  drone_plot_loc_y = []
-  for d in range(Nd):
-    if drone_travel[d]['s'] <= tick <= drone_travel[d]['s'] + drone_travel[d]['d'] - 1:
-      dt = tick - drone_travel[d]['s']
-      dx = drone_travel[d]['tx'] - drone_travel[d]['fx']
-      dy = drone_travel[d]['ty'] - drone_travel[d]['fy']
-      drone_plot_loc_x.append(drone_travel[d]['fx'] + dt * dx / drone_travel[d]['d'])
-      drone_plot_loc_y.append(drone_travel[d]['fy'] + dt * dy / drone_travel[d]['d'])
-    else:
-      drone_plot_loc_x.append(drone_loc_x[d])
-      drone_plot_loc_y.append(drone_loc_y[d])
-
-def animate(frame):
-  simulate_step(frame)
-  ewx = [warehouse_loc_x[w] for w in range(Nw) if warehouse_empty[w]]
-  ewy = [warehouse_loc_y[w] for w in range(Nw) if warehouse_empty[w]]
-  dox = [order_loc_x[o] for o in range(No) if order_done[o]]
-  doy = [order_loc_y[o] for o in range(No) if order_done[o]]
-  global plot_lines
-  plot_lines[1].set_data(ewx, ewy)
-  plot_lines[3].set_data(dox, doy)
-  plot_lines[4].set_data(drone_plot_loc_x, drone_plot_loc_y)
-  return plot_lines
 
 def main(argv):
-  load_problem(FLAGS.problem_file)
-  load_solution(FLAGS.solution_file)
-  init_simulation()
+    ps = ProblemSolution(FLAGS.problem_file, FLAGS.solution_file)
+    sim = Simulation(ps)
 
-  if FLAGS.just_calc:
-    for tick in range(T): simulate_step(tick)
-  else:
-    fig = plt.figure()
-  
-    ewx = [warehouse_loc_x[w] for w in range(Nw) if warehouse_empty[w]]
-    ewy = [warehouse_loc_y[w] for w in range(Nw) if warehouse_empty[w]]
-    dox = [order_loc_x[o] for o in range(No) if order_done[o]]
-    doy = [order_loc_y[o] for o in range(No) if order_done[o]]
-    global plot_lines
-    plot_lines = plt.plot(warehouse_loc_x, warehouse_loc_y, 'rs',
-                          ewx, ewy, 'ks',
-                          order_loc_x, order_loc_y, 'bo',
-                          dox, doy, 'ko',
-                          drone_loc_x, drone_loc_y, 'm1')
+    if FLAGS.just_calc:
+        for tick in range(ps.t):
+            sim.simulate_step(tick)
+    elif FLAGS.show_anim or FLAGS.anim_video_file:
+        fig = plt.figure()
 
-    anim = ani.FuncAnimation(fig, animate, frames=T,
-                             interval = 1000 / 100,
-                             repeat=False)
+        wx, wy, ewx, ewy, ox, oy, dox, doy, dx, dy = calc_plot_data(sim)
+        plot_lines = plt.plot(wx, wy, 'rs', ewx, ewy, 'ks', ox, oy, 'bo', dox,
+                              doy, 'ko', dx, dy, 'm1')
 
-    anim.save('anim.mp4', fps=100, extra_args=['-vcodec', 'libx264'])
+        def animate(frame):
+            sim.simulate_step(frame)
+            _, _, ewx, ewy, _, _, dox, doy, dx, dy = calc_plot_data(sim)
+            plot_lines[1].set_data(ewx, ewy)
+            plot_lines[3].set_data(dox, doy)
+            plot_lines[4].set_data(dx, dy)
+            return plot_lines
 
-    plt.show()
-  
-  logging.info('TOTAL POINTS = %d' % total_points)
+        num_frames = ps.t if FLAGS.anim_frames < 0 else FLAGS.anim_frames
+        anim = ani.FuncAnimation(fig,
+                                 animate,
+                                 frames=num_frames,
+                                 interval=10,
+                                 repeat=False)
 
-if __name__== "__main__":
-  app.run(main)
+        if FLAGS.show_anim:
+            plt.show()
+        else:
+            anim.save(FLAGS.anim_video_file,
+                      fps=FLAGS.anim_video_fps,
+                      extra_args=['-vcodec', 'libx264'])
 
+    if sim.last_tick >= 0:
+        logging.info(f'TOTAL POINTS = {int(sim.total_points)}')
+
+
+if __name__ == "__main__":
+    app.run(main)

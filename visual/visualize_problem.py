@@ -21,9 +21,9 @@ flags.DEFINE_string(
 
 class Problem:
     def __init__(self, problem_path: str):
-        logging.info(f'Loading from: {problem_path}')
+        logging.info(f'Loading problem from: {problem_path}')
         with open(problem_path, "r") as fin:
-            w, h, self.nd, self.t, self.m = [int(x) for x in next(fin).split()]
+            _, _, self.nd, self.t, self.m = [int(x) for x in next(fin).split()]
             self.np = int(next(fin).split()[0])
             self.product_weight = [int(x) for x in next(fin).split()]
             self.nw = int(next(fin).split()[0])
@@ -42,11 +42,11 @@ class Problem:
                 self.order_loc.append((x, y))
                 # Eat one line - the one containing # of product items
                 next(fin)
-                curr_order_request = [0 for x in range(self.np)]
+                curr_order_request = [0 for _ in range(self.np)]
                 for x in next(fin).split():
                     curr_order_request[int(x)] += 1
                 self.order_request.append(curr_order_request)
-        logging.info("Loading done.")
+        logging.info('Loading done.')
 
 
 class InteractivePlot:
