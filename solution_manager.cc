@@ -131,19 +131,19 @@ bool SolutionManager::Simulate(const Solution& solution, int* score) {
     // Handle commands.
     for (const auto& cmd : moment.second) {
       // Check the command timing.
-      if (drone_busy_until[cmd.drone_id()] > moment.first - 1) {
+      if (drone_busy_until[cmd.drone()] > moment.first - 1) {
         LOG(ERROR) << "A single drone's commands can't overlap!";
         return false;
       }
-      if (drone_busy_until[cmd.drone_id()] < moment.first - 1) {
+      if (drone_busy_until[cmd.drone()] < moment.first - 1) {
         LOG(ERROR) << "Drones can't be idle, add WAIT commands to fill in the "
                    << "gaps.";
         return false;
       }
 
       // Mark the drone as busy.
-      drone_busy_until[cmd.drone_id()] +=
-          CommandDuration(drone_loc[cmd.drone_id()], problem, cmd);
+      drone_busy_until[cmd.drone()] +=
+          CommandDuration(drone_loc[cmd.drone()], problem, cmd);
 
       switch (cmd.type()) {
         case DroneCommand_CommandType_WAIT: {
@@ -158,54 +158,51 @@ bool SolutionManager::Simulate(const Solution& solution, int* score) {
           }
           warehouse_inventory[cmd.warehouse()].Update(cmd.product(),
                                                       -cmd.num_items());
-          drone_inventory[cmd.drone_id()].Update(cmd.product(),
-                                                 cmd.num_items());
-          drone_weight[cmd.drone_id()] +=
+          drone_inventory[cmd.drone()].Update(cmd.product(), cmd.num_items());
+          drone_weight[cmd.drone()] +=
               cmd.num_items() * problem.product(cmd.product()).m();
-          if (drone_weight[cmd.drone_id()] > problem.m()) {
+          if (drone_weight[cmd.drone()] > problem.m()) {
             LOG(ERROR) << "Drone capacity exceeded.";
             return false;
           }
-          drone_loc[cmd.drone_id()] =
+          drone_loc[cmd.drone()] =
               problem.warehouse(cmd.warehouse()).location();
           break;
         }
         case DroneCommand_CommandType_UNLOAD: {
-          if (drone_inventory[cmd.drone_id()].GetProductState(cmd.product()) <
+          if (drone_inventory[cmd.drone()].GetProductState(cmd.product()) <
               cmd.num_items()) {
             LOG(ERROR) << "Can't unload more than the drone is carrying.";
             return false;
           }
-          drone_inventory[cmd.drone_id()].Update(cmd.product(),
-                                                 -cmd.num_items());
-          drone_weight[cmd.drone_id()] -=
+          drone_inventory[cmd.drone()].Update(cmd.product(), -cmd.num_items());
+          drone_weight[cmd.drone()] -=
               cmd.num_items() * problem.product(cmd.product()).m();
-          unload_schedule[drone_busy_until[cmd.drone_id()]].push_back(
+          unload_schedule[drone_busy_until[cmd.drone()]].push_back(
               std::make_tuple(cmd.warehouse(), cmd.product(), cmd.num_items()));
           // Make sure there's an entry in the timeline, even an empty one, in
           // order to ensure the unloading will be handled.
-          timeline[drone_busy_until[cmd.drone_id()]];
-          drone_loc[cmd.drone_id()] =
+          timeline[drone_busy_until[cmd.drone()]];
+          drone_loc[cmd.drone()] =
               problem.warehouse(cmd.warehouse()).location();
           break;
         }
         case DroneCommand_CommandType_DELIVER: {
-          if (drone_inventory[cmd.drone_id()].GetProductState(cmd.product()) <
+          if (drone_inventory[cmd.drone()].GetProductState(cmd.product()) <
               cmd.num_items()) {
             LOG(ERROR) << "Can't deliver more than the drone is carrying.";
             return false;
           }
-          drone_inventory[cmd.drone_id()].Update(cmd.product(),
-                                                 -cmd.num_items());
-          drone_weight[cmd.drone_id()] -=
+          drone_inventory[cmd.drone()].Update(cmd.product(), -cmd.num_items());
+          drone_weight[cmd.drone()] -=
               cmd.num_items() * problem.product(cmd.product()).m();
-          deliver_schedule[drone_busy_until[cmd.drone_id()]].push_back(
+          deliver_schedule[drone_busy_until[cmd.drone()]].push_back(
               std::make_tuple(cmd.order(), cmd.product(), cmd.num_items()));
           // Make sure there's an entry in the timeline, even an empty one, in
           // order to ensure the delivery will be handled.
-          timeline[drone_busy_until[cmd.drone_id()]];
+          timeline[drone_busy_until[cmd.drone()]];
 
-          drone_loc[cmd.drone_id()] = problem.order(cmd.order()).location();
+          drone_loc[cmd.drone()] = problem.order(cmd.order()).location();
           break;
         }
       }
@@ -270,9 +267,10 @@ std::unique_ptr<Solution> SolutionManager::LoadFromSolutionFile(
                                             problem.warehouse(0).location());
 
   int nc = get_int();
+  LOG(INFO) << "Reading " << nc << " commands.";
   while (nc--) {
     DroneCommand cmd;
-    cmd.set_drone_id(get_int());
+    cmd.set_drone(get_int());
     char c = fin.get();
     while (isspace(c)) c = fin.get();
     switch (tolower(c)) {
@@ -303,8 +301,8 @@ std::unique_ptr<Solution> SolutionManager::LoadFromSolutionFile(
         break;
       }
     }
-    cmd.set_start_time(next_drone_command[cmd.drone_id()]);
-    Location next_location = next_drone_location[cmd.drone_id()];
+    cmd.set_start_time(next_drone_command[cmd.drone()]);
+    Location next_location = next_drone_location[cmd.drone()];
     if (cmd.has_warehouse()) {
       next_location = problem.warehouse(cmd.warehouse()).location();
     }
@@ -312,10 +310,10 @@ std::unique_ptr<Solution> SolutionManager::LoadFromSolutionFile(
       next_location = problem.order(cmd.order()).location();
     }
     int cmd_duration =
-        CommandDuration(next_drone_location[cmd.drone_id()], problem, cmd);
-    next_drone_command[cmd.drone_id()] += cmd_duration;
-    next_drone_location[cmd.drone_id()] = next_location;
-    *solution->mutable_drone_desc(cmd.drone_id())->add_drone_command() = cmd;
+        CommandDuration(next_drone_location[cmd.drone()], problem, cmd);
+    next_drone_command[cmd.drone()] += cmd_duration;
+    next_drone_location[cmd.drone()] = next_location;
+    *solution->mutable_drone_desc(cmd.drone())->add_drone_command() = cmd;
   }
 
   fin.close();
@@ -338,24 +336,24 @@ bool SolutionManager::SaveToSolutionFile(const Solution& solution,
     for (const auto& cmd : dd.drone_command()) {
       switch (cmd.type()) {
         case DroneCommand_CommandType_WAIT: {
-          fout << absl::Substitute("$0 W $1\n", cmd.drone_id(), cmd.duration());
+          fout << absl::Substitute("$0 W $1\n", cmd.drone(), cmd.duration());
           break;
         }
         case DroneCommand_CommandType_LOAD: {
-          fout << absl::Substitute("$0 L $1 $2 $3\n", cmd.drone_id(),
+          fout << absl::Substitute("$0 L $1 $2 $3\n", cmd.drone(),
                                    cmd.warehouse(), cmd.product(),
                                    cmd.num_items());
           break;
         }
         case DroneCommand_CommandType_UNLOAD: {
-          fout << absl::Substitute("$0 U $1 $2 $3\n", cmd.drone_id(),
+          fout << absl::Substitute("$0 U $1 $2 $3\n", cmd.drone(),
                                    cmd.warehouse(), cmd.product(),
                                    cmd.num_items());
           break;
         }
         case DroneCommand_CommandType_DELIVER: {
-          fout << absl::Substitute("$0 D $1 $2 $3\n", cmd.drone_id(),
-                                   cmd.order(), cmd.product(), cmd.num_items());
+          fout << absl::Substitute("$0 D $1 $2 $3\n", cmd.drone(), cmd.order(),
+                                   cmd.product(), cmd.num_items());
           break;
         }
       }

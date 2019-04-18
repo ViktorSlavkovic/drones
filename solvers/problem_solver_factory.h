@@ -1,10 +1,10 @@
-#ifndef PROBLEM_SOLVER_FACTORY_H_
-#define PROBLEM_SOLVER_FACTORY_H_
+#ifndef SOLVERS_PROBLEM_SOLVER_FACTORY_H_
+#define SOLVERS_PROBLEM_SOLVER_FACTORY_H_
 
 #include <memory>
 #include <string>
 
-#include "problem_solver.h"
+#include "solvers/problem_solver.h"
 
 namespace drones {
 
@@ -18,4 +18,4 @@ class ProblemSolverFactory {
 
 }  // namespace drones
 
-#endif  // PROBLEM_SOLVER_FACTORY_H_
+#endif  // SOLVERS_PROBLEM_SOLVER_FACTORY_H_

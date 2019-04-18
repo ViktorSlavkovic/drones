@@ -1,4 +1,4 @@
-#include "lp_util.h"
+#include "solvers/util/lp_util.h"
 
 #include <string>
 
@@ -6,7 +6,8 @@
 #include "google/protobuf/message.h"
 
 namespace drones {
-namespace lin_prog {
+namespace util {
+namespace lp {
 
 std::string& SavyProtoHash(const google::protobuf::Message& proto) {
   static std::string hashval;
@@ -14,5 +15,6 @@ std::string& SavyProtoHash(const google::protobuf::Message& proto) {
   return hashval;
 }
 
-}  // namespace lin_prog
+}  // namespace lp
+}  // namespace util
 }  // namespace drones

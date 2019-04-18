@@ -1,4 +1,4 @@
-#include "sp2_solver.h"
+#include "solvers/sp2_solver/sp2_solver.h"
 
 #include <algorithm>
 #include <cmath>
@@ -12,7 +12,7 @@ std::unique_ptr<Solution> Sp2Solver::Solve() {
   *solution->mutable_problem() = problem_;
   auto* drone_commands = solution->add_drone_desc();
   std::vector<std::pair<int, int>> distances;
-  
+
   for (int warehouse = 0; warehouse < problem_.nw(); warehouse++) {
     int dx = problem_.order(0).location().x() -
              problem_.warehouse(warehouse).location().x();
@@ -23,7 +23,7 @@ std::unique_ptr<Solution> Sp2Solver::Solve() {
   }
   int d0 = distances.front().first;
   std::sort(distances.begin(), distances.end());
-  
+
   // It's definitely fastest to bring one item from the warehouse 0.
   //
   // If the simulation time is too short to execute the initial LOAD+DELIVER
@@ -35,7 +35,7 @@ std::unique_ptr<Solution> Sp2Solver::Solve() {
   {
     auto* cmd = drone_commands->add_drone_command();
     cmd->set_type(DroneCommand_CommandType_LOAD);
-    cmd->set_drone_id(0);
+    cmd->set_drone(0);
     cmd->set_warehouse(0);
     cmd->set_product(0);
     cmd->set_num_items(1);
@@ -45,7 +45,7 @@ std::unique_ptr<Solution> Sp2Solver::Solve() {
   {
     auto* cmd = drone_commands->add_drone_command();
     cmd->set_type(DroneCommand_CommandType_DELIVER);
-    cmd->set_drone_id(0);
+    cmd->set_drone(0);
     cmd->set_order(0);
     cmd->set_product(0);
     cmd->set_num_items(1);
@@ -73,7 +73,7 @@ std::unique_ptr<Solution> Sp2Solver::Solve() {
         }
         auto* cmd = drone_commands->add_drone_command();
         cmd->set_type(DroneCommand_CommandType_LOAD);
-        cmd->set_drone_id(0);
+        cmd->set_drone(0);
         cmd->set_warehouse(warehouse.second);
         cmd->set_product(0);
         cmd->set_num_items(1);
@@ -89,7 +89,7 @@ std::unique_ptr<Solution> Sp2Solver::Solve() {
         }
         auto* cmd = drone_commands->add_drone_command();
         cmd->set_type(DroneCommand_CommandType_DELIVER);
-        cmd->set_drone_id(0);
+        cmd->set_drone(0);
         cmd->set_order(0);
         cmd->set_product(0);
         cmd->set_num_items(1);
@@ -100,7 +100,7 @@ std::unique_ptr<Solution> Sp2Solver::Solve() {
     if (trimmed) {
       break;
     }
-  } 
+  }
   return solution;
 }
 

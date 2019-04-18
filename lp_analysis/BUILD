@@ -9,6 +9,19 @@ load(
 )
 load("@external_python_deps//:requirements.bzl", "requirement")
 
+par_binary(
+    name = "var_completeness",
+    srcs = ["var_completeness.py"],
+    data = [":eval_main"],
+    deps = [
+        requirement("absl-py"),
+        requirement("numpy"),
+        requirement("matplotlib"),
+        requirement("psopy"),
+        requirement("scipy"),
+    ],
+)
+
 cc_binary(
     name = "eval_main",
     srcs = ["eval_main.cc"],
@@ -17,17 +30,4 @@ cc_binary(
         "@com_github_gflags_gflags//:gflags",
         "@com_github_glog_glog//:glog",
     ],
-)
-
-par_binary(
-    name = "var_completeness",
-    srcs = ["var_completeness.py"],
-    deps = [
-        requirement("absl-py"),
-        requirement("numpy"),
-        requirement("matplotlib"),
-        requirement("psopy"),
-        requirement("scipy"),
-    ],
-    data = [":eval_main"],
 )

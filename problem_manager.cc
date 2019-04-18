@@ -12,25 +12,29 @@
 #include "absl/strings/substitute.h"
 #include "glog/logging.h"
 
-DEFINE_int32(max_ipo, 10000, "Max # of items per order. Hashcide says 10^4.");
-DEFINE_int32(max_coord, 10000, "Max coordinate value. Don't go over 10^4.");
-DEFINE_int32(max_nd, 100,
+DEFINE_int32(gen_max_ipo, 10000,
+             "Max # of items per order. Hashcide says 10^4.");
+DEFINE_int32(gen_max_coord, 10000, "Max coordinate value. Don't go over 10^4.");
+DEFINE_int32(
+    gen_max_nd, 100,
     "Max number of drones. Hashcode says 10^3, but they give up to 30.");
-DEFINE_int32(max_nw, 100 ,
+DEFINE_int32(
+    gen_max_nw, 100,
     "Max number of warehouses. Hashcode says 10^4, but they give up to 16.");
-DEFINE_int32(max_np, 400,
+DEFINE_int32(
+    gen_max_np, 400,
     "Max number of products. Hashcode says 10^4, but they give up to 400.");
-DEFINE_int32(max_no, 2000,
+DEFINE_int32(
+    gen_max_no, 2000,
     "Max number of products. Hashcode says 10^4, but they give less than 5K.");
-DEFINE_int32(max_M, 500,
+DEFINE_int32(
+    gen_max_M, 500,
     "Max drone capacity. Hashcode says 10^4, but they give up to 200.");
-
 
 namespace drones {
 
 std::unique_ptr<Problem> ProblemManager::GenerateProblem(
-    const ProblemType &problem_type,
-    unsigned int seed) {
+    const ProblemType &problem_type, unsigned int seed) {
   auto problem = std::make_unique<Problem>();
 
   // Random stuff.
@@ -44,8 +48,8 @@ std::unique_ptr<Problem> ProblemManager::GenerateProblem(
   std::set<std::pair<int, int>> used_locations;
   auto loc_gen = [&]() {
     while (true) {
-      int x = otgen(0, FLAGS_max_coord);
-      int y = otgen(0, FLAGS_max_coord);
+      int x = otgen(0, FLAGS_gen_max_coord);
+      int y = otgen(0, FLAGS_gen_max_coord);
       if (used_locations.count({x, y})) {
         continue;
       }
@@ -58,11 +62,11 @@ std::unique_ptr<Problem> ProblemManager::GenerateProblem(
   };
 
   problem->set_t(otgen(1, 1000000));
-  problem->set_nd(problem_type.nd_1() ? 1 : otgen(1, FLAGS_max_nd));
-  problem->set_nw(problem_type.nw_1() ? 1 : otgen(1, FLAGS_max_nw));
-  problem->set_np(problem_type.np_1() ? 1 : otgen(1, FLAGS_max_np));
-  problem->set_no(problem_type.no_1() ? 1 : otgen(1, FLAGS_max_no));
-  problem->set_m(problem_type.m_m() ? 1 : otgen(1, FLAGS_max_M));
+  problem->set_nd(problem_type.nd_1() ? 1 : otgen(1, FLAGS_gen_max_nd));
+  problem->set_nw(problem_type.nw_1() ? 1 : otgen(1, FLAGS_gen_max_nw));
+  problem->set_np(problem_type.np_1() ? 1 : otgen(1, FLAGS_gen_max_np));
+  problem->set_no(problem_type.no_1() ? 1 : otgen(1, FLAGS_gen_max_no));
+  problem->set_m(problem_type.m_m() ? 1 : otgen(1, FLAGS_gen_max_M));
 
   for (int product = 0; product < problem->np(); product++) {
     problem->add_product()->set_m(problem_type.m_m() ? 1
@@ -88,18 +92,18 @@ std::unique_ptr<Problem> ProblemManager::GenerateProblem(
     *order_proto->mutable_location() = loc_gen();
     int chosen_product = otgen(0, problem->np() - 1);
     int total_ordered_items = 0;
-  
+
     for (int product = 0; product < problem->np(); product++) {
       int num_items = 0;
       if (problem_type.ipo_1()) {
         num_items = product == chosen_product ? 1 : 0;
       } else {
-        int upper_bound = FLAGS_max_ipo < problem->np()
-                        ? FLAGS_max_ipo - total_ordered_items
-                        : FLAGS_max_ipo / problem->np();
+        int upper_bound = FLAGS_gen_max_ipo < problem->np()
+                              ? FLAGS_gen_max_ipo - total_ordered_items
+                              : FLAGS_gen_max_ipo / problem->np();
         num_items = upper_bound < 1
-                  ? 0
-                  : otgen(product == chosen_product ? 1 : 0, upper_bound);
+                        ? 0
+                        : otgen(product == chosen_product ? 1 : 0, upper_bound);
       }
       total_ordered_items += num_items;
       total_requested[product] += num_items;
@@ -146,7 +150,7 @@ std::unique_ptr<Problem> ProblemManager::LoadFromProblemFile(
     problem->add_product()->set_m(get_int());
   }
   problem->set_nw(get_int());
- 
+
   for (int i = 0; i < problem->nw(); i++) {
     auto *warehouse = problem->add_warehouse();
     warehouse->mutable_location()->set_x(get_int());

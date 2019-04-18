@@ -1,97 +1,116 @@
+#include "absl/strings/substitute.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
+#include "google/protobuf/text_format.h"
 #include "problem.pb.h"
 #include "problem_manager.h"
-#include "problem_solver_factory.h"
 #include "solution.pb.h"
 #include "solution_manager.h"
+#include "solvers/problem_solver_factory.h"
 
-DEFINE_string(problem_file, "",
-              "Problem file (as specified in the original HashCode problem) "
-              "path.");
-DEFINE_string(solution_file, "",
-              "Solution file (as specified in the original HashCode problem) "
-              "path.");
-DEFINE_bool(only_problem_type, false, "Only print the problem type and exit.");
-DEFINE_int32(num_random_iter, 0, "Number of random solver iterations.");
+#include <iostream>
+#include <memory>
+
+DEFINE_string(
+    problem_file, "",
+    "Problem file (HashCode format) path. Problem will be read from this file "
+    "unless gen_problem flag is true.");
+DEFINE_bool(
+    read_solution, false,
+    "If true, the solution will be read from solution file specified by "
+    "solution_file flag.");
+DEFINE_string(
+    solution_file, "",
+    "Solution file (HashCode format) path. If read_solution flag is set, the "
+    "solution will be read from this path, otherwise, the solution will be "
+    "generated and stored to this path.");
+DEFINE_bool(
+    gen_problem, false,
+    "If true, the problem will be generated. Use gen_problem_type flag to "
+    "specify problem type.");
+DEFINE_bool(
+    write_gen_problem, true,
+    "If true, and gen_problem is true, the genereated problem will be written "
+    "to the file specified by problem_file flag.");
+DEFINE_bool(
+    gen_only, false,
+    "If true and gen_problem is true, the program will exit without attempting "
+    "to solve it. Use this to generate problem only.");
+DEFINE_string(
+    gen_problem_type, "{}",
+    "Type of the problem being generated (ProblemType proto) as a text proto.");
+DEFINE_string(
+    solver_type, "random",
+    "The solver type (see ProblemSolverFactory).");
+DEFINE_bool(
+    check, true,
+    "If true, the solution will be checked - simulated, validated and scored.");
+
+std::unique_ptr<drones::Problem> get_problem() {
+  if (FLAGS_gen_problem) {
+    drones::ProblemType problem_type;
+    CHECK(google::protobuf::TextFormat::ParseFromString(FLAGS_gen_problem_type,
+                                                        &problem_type))
+        << "Unable to parse " << FLAGS_gen_problem_type << " as ProblemType.";
+    return drones::ProblemManager::GenerateProblem(problem_type);
+  }
+  return drones::ProblemManager::LoadFromProblemFile(FLAGS_problem_file);
+}
+
+std::unique_ptr<drones::Solution> get_solution(const drones::Problem& problem) {
+  if (FLAGS_read_solution) {
+    return drones::SolutionManager::LoadFromSolutionFile(problem,
+                                                         FLAGS_solution_file);
+  }
+  auto solver =
+      drones::ProblemSolverFactory::CreateSolver(problem, FLAGS_solver_type);
+  CHECK(solver != nullptr) << "Failed to create the solver object.";
+  return solver->Solve();
+}
 
 int main(int argc, char* argv[]) {
   gflags::ParseCommandLineFlags(&argc, &argv, true);
 
-  auto problem =
-       // drones::ProblemManager::GenerateProblem(drones::ProblemType());
-       drones::ProblemManager::LoadFromProblemFile(FLAGS_problem_file);
-  CHECK(problem != nullptr);
+  auto problem = get_problem();
+  CHECK(problem != nullptr) << "Failed to create the problem object.";
 
-  LOG(INFO) << "Problem type: " << problem->problem_type().DebugString();
+  LOG(INFO) << absl::Substitute(R"(
+    Nd = $0
+    Np = $1
+    Nw = $2
+    No = $3
+    T  = $4
+    ProblemType: $5
+  )",
+      problem->nd(), problem->np(), problem->nw(), problem->no(), problem->t(),
+      problem->problem_type().DebugString());
 
-  if (FLAGS_only_problem_type) {
-    return 0;
-  }
-
-  drones::Solution best_total_solution;
-  int best_total_score = -1;
-
-  {
-    auto solver =
-        drones::ProblemSolverFactory::CreateSolver(*problem, "random");
-    CHECK(solver != nullptr);
-
-    drones::Solution best_solution;
-    int best_score = -1;
-
-    for (int num_iter = 0; num_iter < FLAGS_num_random_iter; num_iter++) {
-      LOG(INFO) << "**************** ITER: " << num_iter;
-
-      auto solution = solver->Solve();
-      CHECK(solution != nullptr);
-
-      LOG(INFO) << "Starting simulation";
-      int score = -1;
-      if (drones::SolutionManager::Simulate(*solution, &score)) {
-        LOG(INFO) << "Solution is valid and gives " << score;
-      } else {
-        LOG(ERROR) << "Invalid solution.";
-      }
-
-      if (score > best_score) {
-        best_score = score;
-        best_solution = *solution;
-      }
+  if (FLAGS_gen_problem) {
+    if (FLAGS_write_gen_problem) {
+      CHECK(drones::ProblemManager::SaveToProblemFile(*problem,
+                                                      FLAGS_problem_file))
+          << "Failed to save problem to: " << FLAGS_problem_file;
     }
-    LOG(INFO) << "BEST RANDOM SOLVER'S SCORE: " << best_score;
-    if (best_score > best_total_score) {
-      best_total_score = best_score;
-      best_total_solution = best_solution;
+    if (FLAGS_gen_only) {
+      return 0;
     }
   }
 
-  {
-    auto solver = drones::ProblemSolverFactory::CreateSolver(*problem, "ecf");
-    CHECK(solver != nullptr);
+  auto solution = get_solution(*problem);
+  CHECK(solution != nullptr) << "Failed to create the solution object.";
 
-    auto solution = solver->Solve();
-    CHECK(solution != nullptr);
-
-    LOG(INFO) << "Starting simulation";
+  if (FLAGS_check) {
     int score = -1;
-    if (drones::SolutionManager::Simulate(*solution, &score)) {
-      LOG(INFO) << "Solution is valid and gives " << score;
-    } else {
-      LOG(ERROR) << "Invalid solution.";
-    }
-
-    if (score > best_total_score) {
-      best_total_score = score;
-      best_total_solution = *solution;
-    }
+    CHECK(drones::SolutionManager::Simulate(*solution, &score))
+        << "Invalid solution!";
+    std::cout << "TOTAL SCORE: " << score << std::endl;
   }
 
-  LOG(INFO) << "BEST SCORE: " << best_total_score;
-  LOG(INFO) << "Saving the solution...";
-  CHECK(drones::SolutionManager::SaveToSolutionFile(best_total_solution,
-                                                    FLAGS_solution_file))
-      << "Failed to save the solution.";
+  if (!FLAGS_read_solution && !FLAGS_solution_file.empty()) {
+    CHECK(drones::SolutionManager::SaveToSolutionFile(*solution,
+                                                      FLAGS_solution_file))
+        << "Failed to save solution to: " << FLAGS_solution_file;
+  }
 
   return 0;
 }

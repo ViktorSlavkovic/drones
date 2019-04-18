@@ -1,4 +1,4 @@
-#include "lp_solver.h"
+#include "solvers/lp_solver/lp_solver.h"
 
 #include <algorithm>
 #include <cmath>
@@ -9,10 +9,10 @@
 #include "absl/strings/str_join.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
-#include "lp_util.h"
 #include "ortools/linear_solver/linear_solver.h"
 #include "ortools/linear_solver/linear_solver.pb.h"
 #include "problem.pb.h"
+#include "solvers/util/lp_util.h"
 
 namespace drones {
 
@@ -30,7 +30,7 @@ static const std::vector<double> optimized_coefficients = {
 
 // Does linear interpolation on the original vector of optimized coefficients
 // to adjust it to the given size.
-// FIXME: Fix ranges- first coefficients shouldn't match in general.
+// FIXME: Fix ranges - first coefficients shouldn't match in general.
 std::vector<double> InterpolateCoefficients(int size) {
   std::vector<double> res(size);
   double step = (size - 1.0) / (optimized_coefficients.size() - 1.0);
@@ -65,10 +65,10 @@ void LpSolver::CacheInitial() {
   for (int drone = 0; drone < problem_.nd(); drone++) {
     var.set_drone(drone);
     var.set_location(0);
-    aux_var_cache_[lin_prog::SavyProtoHash(var)].coef["const"] = 1;
+    aux_var_cache_[util::lp::SavyProtoHash(var)].coef["const"] = 1;
     for (int loc = 1; loc < problem_.nw() + problem_.no(); loc++) {
       var.set_location(loc);
-      aux_var_cache_[lin_prog::SavyProtoHash(var)].coef["const"] = 0;
+      aux_var_cache_[util::lp::SavyProtoHash(var)].coef["const"] = 0;
     }
   }
   var.Clear();
@@ -80,7 +80,7 @@ void LpSolver::CacheInitial() {
     var.set_warehouse(warehouse);
     for (int product = 0; product < problem_.np(); product++) {
       var.set_product(product);
-      aux_var_cache_[lin_prog::SavyProtoHash(var)].coef["const"] =
+      aux_var_cache_[util::lp::SavyProtoHash(var)].coef["const"] =
           problem_.warehouse(warehouse).stock(product);
     }
   }
@@ -93,7 +93,7 @@ void LpSolver::CacheInitial() {
     var.set_drone(drone);
     for (int product = 0; product < problem_.np(); product++) {
       var.set_product(product);
-      aux_var_cache_[lin_prog::SavyProtoHash(var)].coef["const"] = 0;
+      aux_var_cache_[util::lp::SavyProtoHash(var)].coef["const"] = 0;
     }
   }
   var.Clear();
@@ -105,7 +105,7 @@ void LpSolver::CacheInitial() {
     var.set_order(order);
     for (int product = 0; product < problem_.np(); product++) {
       var.set_product(product);
-      aux_var_cache_[lin_prog::SavyProtoHash(var)].coef["const"] =
+      aux_var_cache_[util::lp::SavyProtoHash(var)].coef["const"] =
           problem_.order(order).request(product);
     }
   }
@@ -118,19 +118,19 @@ int Distance(const Location& src, const Location& dst) {
   return ceil(sqrt(dx * dx + dy * dy));
 }
 
-LpSolver::Polynomial LpSolver::Compute(
+util::lp::Polynomial LpSolver::Compute(
     const drones::lp_solver::VariableDesc& var) {
   if (var.has_t()) {
     CHECK(var.t() >= 0) << "Invalid time: " << var.t();
   }
 
   // Check the cache.
-  std::string var_hash = lin_prog::SavyProtoHash(var);
+  std::string var_hash = util::lp::SavyProtoHash(var);
   if (aux_var_cache_.count(var_hash)) {
     return aux_var_cache_[var_hash];
   }
   // Handle different variable types.
-  Polynomial res;
+  util::lp::Polynomial res;
   drones::lp_solver::VariableDesc dep_var;
   switch (var.type()) {
     case lp_solver::VariableDesc_VariableType_TOTAL_SCORE: {
@@ -176,7 +176,7 @@ LpSolver::Polynomial LpSolver::Compute(
       dep_var.set_type(lp_solver::VariableDesc_VariableType_ORDER_STATE);
       res += Compute(dep_var);
 
-      Polynomial delivery;
+      util::lp::Polynomial delivery;
       dep_var.Clear();
       dep_var.set_product(var.product());
       dep_var.set_order(var.order());
@@ -204,7 +204,7 @@ LpSolver::Polynomial LpSolver::Compute(
                        problem_.m() / problem_.product(var.product()).m());
           for (int num_items = 1; num_items <= max_num_items; num_items++) {
             dep_var.set_num_items(num_items);
-            delivery.coef[lin_prog::SavyProtoHash(dep_var)] = num_items;
+            delivery.coef[util::lp::SavyProtoHash(dep_var)] = num_items;
           }
         }
       }
@@ -219,7 +219,7 @@ LpSolver::Polynomial LpSolver::Compute(
       dep_var.set_type(lp_solver::VariableDesc_VariableType_DRONE_STATE);
       res += Compute(dep_var);
 
-      Polynomial traffic;
+      util::lp::Polynomial traffic;
       dep_var.Clear();
       dep_var.set_drone(var.drone());
       dep_var.set_product(var.product());
@@ -248,9 +248,9 @@ LpSolver::Polynomial LpSolver::Compute(
           for (int num_items = 1; num_items <= drone_cap_items; num_items++) {
             dep_var.set_num_items(num_items);
             dep_var.set_type(lp_solver::VariableDesc_VariableType_LOAD);
-            traffic.coef[lin_prog::SavyProtoHash(dep_var)] = num_items;
+            traffic.coef[util::lp::SavyProtoHash(dep_var)] = num_items;
             dep_var.set_type(lp_solver::VariableDesc_VariableType_UNLOAD);
-            traffic.coef[lin_prog::SavyProtoHash(dep_var)] = -num_items;
+            traffic.coef[util::lp::SavyProtoHash(dep_var)] = -num_items;
           }
         }
         dep_var.clear_warehouse();
@@ -277,7 +277,7 @@ LpSolver::Polynomial LpSolver::Compute(
                        problem_.m() / problem_.product(var.product()).m());
           for (int num_items = 1; num_items <= max_num_items; num_items++) {
             dep_var.set_num_items(num_items);
-            traffic.coef[lin_prog::SavyProtoHash(dep_var)] = -num_items;
+            traffic.coef[util::lp::SavyProtoHash(dep_var)] = -num_items;
           }
         }
       }
@@ -290,7 +290,7 @@ LpSolver::Polynomial LpSolver::Compute(
       dep_var.set_location(var.location());
       dep_var.set_t(var.t() - 1);
       dep_var.set_type(lp_solver::VariableDesc_VariableType_WAIT);
-      res.coef[lin_prog::SavyProtoHash(dep_var)] = 1;
+      res.coef[util::lp::SavyProtoHash(dep_var)] = 1;
 
       int dst_loc = var.location();
       Location actual_dst_loc;
@@ -325,9 +325,9 @@ LpSolver::Polynomial LpSolver::Compute(
             for (int num_items = 1; num_items <= drone_cap_items; num_items++) {
               dep_var.set_num_items(num_items);
               dep_var.set_type(lp_solver::VariableDesc_VariableType_UNLOAD);
-              res.coef[lin_prog::SavyProtoHash(dep_var)] = 1;
+              res.coef[util::lp::SavyProtoHash(dep_var)] = 1;
               dep_var.set_type(lp_solver::VariableDesc_VariableType_LOAD);
-              res.coef[lin_prog::SavyProtoHash(dep_var)] = 1;
+              res.coef[util::lp::SavyProtoHash(dep_var)] = 1;
             }
           } else {
             int max_num_items =
@@ -335,7 +335,7 @@ LpSolver::Polynomial LpSolver::Compute(
                          problem_.m() / problem_.product(product).m());
             for (int num_items = 1; num_items <= max_num_items; num_items++) {
               dep_var.set_type(lp_solver::VariableDesc_VariableType_DELIVER);
-              res.coef[lin_prog::SavyProtoHash(dep_var)] = 1;
+              res.coef[util::lp::SavyProtoHash(dep_var)] = 1;
             }
           }
         }
@@ -349,7 +349,7 @@ LpSolver::Polynomial LpSolver::Compute(
       dep_var.set_type(lp_solver::VariableDesc_VariableType_WAREHOUSE_STATE);
       res += Compute(dep_var);
 
-      Polynomial traffic;
+      util::lp::Polynomial traffic;
       dep_var.Clear();
       dep_var.set_warehouse(var.warehouse());
       dep_var.set_product(var.product());
@@ -379,10 +379,10 @@ LpSolver::Polynomial LpSolver::Compute(
             dep_var.set_num_items(num_items);
 
             dep_var.set_type(lp_solver::VariableDesc_VariableType_UNLOAD);
-            traffic.coef[lin_prog::SavyProtoHash(dep_var)] = num_items;
+            traffic.coef[util::lp::SavyProtoHash(dep_var)] = num_items;
 
             dep_var.set_type(lp_solver::VariableDesc_VariableType_LOAD);
-            traffic.coef[lin_prog::SavyProtoHash(dep_var)] = -num_items;
+            traffic.coef[util::lp::SavyProtoHash(dep_var)] = -num_items;
           }
         }
       }
@@ -479,7 +479,7 @@ std::unique_ptr<Solution> LpSolver::Solve() {
     var_desc.set_drone(drone);
     for (int t = 1; t <= simulation_time_; t++) {
       var_desc.set_t(t);
-      Polynomial drone_total;
+      util::lp::Polynomial drone_total;
       for (int product = 0; product < problem_.np(); product++) {
         var_desc.set_product(product);
 
@@ -536,14 +536,14 @@ std::unique_ptr<Solution> LpSolver::Solve() {
         // LOG(INFO) << "d, t, l = " << drone << ", " << t << ", " << loc;
 
         var_desc.set_type(lp_solver::VariableDesc_VariableType_DRONE_LOC);
-        Polynomial minus_drone_loc = Compute(var_desc);
+        util::lp::Polynomial minus_drone_loc = Compute(var_desc);
         minus_drone_loc *= -1.0;
-        Polynomial poly;
+        util::lp::Polynomial poly;
 
         // wait - drone_loc <= 0;
         var_desc.set_type(lp_solver::VariableDesc_VariableType_WAIT);
         poly = minus_drone_loc;
-        poly.coef[lin_prog::SavyProtoHash(var_desc)] += 1.0;
+        poly.coef[util::lp::SavyProtoHash(var_desc)] += 1.0;
         {
           MPConstraint* c =
               solver.MakeRowConstraint(-inf, 0.0 - poly.coef["const"]);
@@ -565,7 +565,7 @@ std::unique_ptr<Solution> LpSolver::Solve() {
 
               poly = minus_drone_loc;
               var_desc.set_type(lp_solver::VariableDesc_VariableType_LOAD);
-              poly.coef[lin_prog::SavyProtoHash(var_desc)] += 1.0;
+              poly.coef[util::lp::SavyProtoHash(var_desc)] += 1.0;
               {
                 MPConstraint* c =
                     solver.MakeRowConstraint(-inf, 0.0 - poly.coef["const"]);
@@ -577,7 +577,7 @@ std::unique_ptr<Solution> LpSolver::Solve() {
 
               poly = minus_drone_loc;
               var_desc.set_type(lp_solver::VariableDesc_VariableType_UNLOAD);
-              poly.coef[lin_prog::SavyProtoHash(var_desc)] += 1.0;
+              poly.coef[util::lp::SavyProtoHash(var_desc)] += 1.0;
               {
                 MPConstraint* c =
                     solver.MakeRowConstraint(-inf, 0.0 - poly.coef["const"]);
@@ -601,7 +601,7 @@ std::unique_ptr<Solution> LpSolver::Solve() {
 
               poly = minus_drone_loc;
               var_desc.set_type(lp_solver::VariableDesc_VariableType_DELIVER);
-              poly.coef[lin_prog::SavyProtoHash(var_desc)] += 1.0;
+              poly.coef[util::lp::SavyProtoHash(var_desc)] += 1.0;
               {
                 MPConstraint* c =
                     solver.MakeRowConstraint(-inf, 0.0 - poly.coef["const"]);
@@ -630,7 +630,7 @@ std::unique_ptr<Solution> LpSolver::Solve() {
         var_desc.set_t(t);
         var_desc.set_location(loc);
         var_desc.set_type(lp_solver::VariableDesc_VariableType_WAIT);
-        c->SetCoefficient(var_access(lin_prog::SavyProtoHash(var_desc)), 1.0);
+        c->SetCoefficient(var_access(util::lp::SavyProtoHash(var_desc)), 1.0);
 
         auto actual_location =
             loc < problem_.nw()
@@ -654,10 +654,10 @@ std::unique_ptr<Solution> LpSolver::Solve() {
                 var_desc.set_num_items(num_items);
 
                 var_desc.set_type(lp_solver::VariableDesc_VariableType_LOAD);
-                c->SetCoefficient(var_access(lin_prog::SavyProtoHash(var_desc)),
+                c->SetCoefficient(var_access(util::lp::SavyProtoHash(var_desc)),
                                   1.0);
                 var_desc.set_type(lp_solver::VariableDesc_VariableType_UNLOAD);
-                c->SetCoefficient(var_access(lin_prog::SavyProtoHash(var_desc)),
+                c->SetCoefficient(var_access(util::lp::SavyProtoHash(var_desc)),
                                   1.0);
               }
             }
@@ -679,7 +679,7 @@ std::unique_ptr<Solution> LpSolver::Solve() {
                 var_desc.set_num_items(num_items);
 
                 var_desc.set_type(lp_solver::VariableDesc_VariableType_DELIVER);
-                c->SetCoefficient(var_access(lin_prog::SavyProtoHash(var_desc)),
+                c->SetCoefficient(var_access(util::lp::SavyProtoHash(var_desc)),
                                   1.0);
               }
             }
@@ -718,7 +718,7 @@ std::unique_ptr<Solution> LpSolver::Solve() {
     CHECK(var_desc.ParseFromString(p.first)) << "Failed to parse var_desc.";
     auto* cmd =
         solution->mutable_drone_desc(var_desc.drone())->add_drone_command();
-    cmd->set_drone_id(var_desc.drone());
+    cmd->set_drone(var_desc.drone());
     cmd->set_start_time(var_desc.t());
     switch (var_desc.type()) {
       case lp_solver::VariableDesc_VariableType_WAIT: {

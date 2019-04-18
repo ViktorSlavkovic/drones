@@ -40,6 +40,25 @@ multimap<int, tuple<int, int, int>> delivery_schedule;  // t -> (o, p, n)
 
 int64_t score;
 
+bool first_int(const string& path) {
+  ifstream fin(path);
+  assert(fin.good());
+  string s;
+  fin >> s;
+  if (s.empty()) {
+    fin.close();
+    return false;
+  }
+  for (char c : s) {
+    if (!isdigit(c)) {
+      fin.close();
+      return false;
+    }
+  }
+  fin.close();
+  return true;
+}
+
 void LoadProblem(const string& path) {
   cout << "Loading problem file: " << path << endl;
   ifstream fin(path);
@@ -329,7 +348,9 @@ void Simulate() {
 // Usage: ./whatever <problem_file_path> <solution_file_path>
 int main(int argc, char* argv[]) {
   assert(argc == 3);
+  assert(first_int(argv[1]));
   LoadProblem(argv[1]);
+  assert(first_int(argv[2]));
   LoadSolution(argv[2]);
   Simulate();
   cout << "TOTAL SCORE: " << score << endl;

@@ -5,8 +5,8 @@
 #include <random>
 #include <string>
 
-#include "problem.pb.h"
 #include "gflags/gflags.h"
+#include "problem.pb.h"
 
 DECLARE_int32(max_ipo);
 DECLARE_int32(max_coord);
@@ -24,7 +24,8 @@ class ProblemManager {
   static std::unique_ptr<Problem> GenerateProblem(
       const ProblemType& problem_type, unsigned int seed);
   // Same as above, just using the std::random_device for seeding.
-  static std::unique_ptr<Problem> GenerateProblem(const ProblemType& problem_type) {
+  static std::unique_ptr<Problem> GenerateProblem(
+      const ProblemType& problem_type) {
     std::random_device rand_dev;
     return GenerateProblem(problem_type, rand_dev());
   }

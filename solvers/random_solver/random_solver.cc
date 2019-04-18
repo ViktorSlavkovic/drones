@@ -1,4 +1,4 @@
-#include "random_solver.h"
+#include "solvers/random_solver/random_solver.h"
 
 #include <algorithm>
 #include <functional>
@@ -13,9 +13,9 @@
 #include <utility>
 #include <vector>
 
-#include <gflags/gflags.h>
-#include <glog/logging.h>
 #include "absl/strings/str_join.h"
+#include "gflags/gflags.h"
+#include "glog/logging.h"
 
 DEFINE_int32(random_solver_wait_percentage, 0,
              "The percentage of WAIT commands among all generated commands. "
@@ -190,7 +190,7 @@ unique_ptr<Solution> RandomSolver::Solve() {
     int drone = decision_schedule.top().second;
     if (t >= next_log) {
       next_log += 1000;
-      //LOG(INFO) << "t: " << t << " / " << problem_.t();
+      // LOG(INFO) << "t: " << t << " / " << problem_.t();
     }
     if (t > problem_.t()) {
       LOG(WARNING)
@@ -231,23 +231,23 @@ unique_ptr<Solution> RandomSolver::Solve() {
         // Everything's taken, just deliver it if you have it, otherwise, you
         // should wait.
         if (pending_products.empty() && !drone_inventory[drone].empty()) {
-          //LOG(INFO) << "WAIT -> DELIVER";
+          // LOG(INFO) << "WAIT -> DELIVER";
           goto gen_deliver;
         }
       gen_wait:
-        //LOG(INFO) << "Generating WAIT    : drone " << drone << " t " << t
+        // LOG(INFO) << "Generating WAIT    : drone " << drone << " t " << t
         //          << " ol " << pending_orders.size();
-        //dbg_print();
+        // dbg_print();
 
         proto_cmd->set_type(DroneCommand_CommandType_WAIT);
         proto_cmd->set_start_time(t);
-        proto_cmd->set_drone_id(drone);
+        proto_cmd->set_drone(drone);
         proto_cmd->set_duration(1);
         drone_prev_cmd[drone] = proto_cmd;
         decision_schedule.push(make_pair(t + 1, drone));
 
-        //LOG(INFO) << "Impact: ";
-        //dbg_print();
+        // LOG(INFO) << "Impact: ";
+        // dbg_print();
         continue;
       }
       // Generate a LOAD.
@@ -256,21 +256,21 @@ unique_ptr<Solution> RandomSolver::Solve() {
         // should wait.
         if (pending_products.empty()) {
           if (drone_inventory[drone].empty()) {
-            //LOG(INFO) << "LOAD -> WAIT";
+            // LOG(INFO) << "LOAD -> WAIT";
             goto gen_wait;
           } else {
-            //LOG(INFO) << "LOAD -> DELIVER";
+            // LOG(INFO) << "LOAD -> DELIVER";
             goto gen_deliver;
           }
         }
 
-        //LOG(INFO) << "Generating LOAD    : drone " << drone << " t " << t
+        // LOG(INFO) << "Generating LOAD    : drone " << drone << " t " << t
         //          << " ol " << pending_orders.size();
-        //dbg_print();
+        // dbg_print();
 
         proto_cmd->set_type(DroneCommand_CommandType_LOAD);
         proto_cmd->set_start_time(t);
-        proto_cmd->set_drone_id(drone);
+        proto_cmd->set_drone(drone);
 
         // Choose a random warehouse.
         int warehouse_idx = otgen(0, pending_warehouses.size() - 1);
@@ -321,16 +321,18 @@ unique_ptr<Solution> RandomSolver::Solve() {
             pending_products[product_idx] = pending_products.back();
             pending_products.pop_back();
           }
-          
-          int d = dist(warehouse, drone_loc[drone]); 
+
+          int d = dist(warehouse, drone_loc[drone]);
           decision_schedule.push(make_pair(t + d + 1, drone));
           // If the command will exceed simulation time, just remove it from the
           // solution, to keep it valid.
           if (t + d > problem_.t()) {
-            solution->mutable_drone_desc(drone)->mutable_drone_command()->RemoveLast();
+            solution->mutable_drone_desc(drone)
+                ->mutable_drone_command()
+                ->RemoveLast();
           }
           drone_loc[drone] = warehouse;
-          drone_prev_cmd[drone] = proto_cmd; 
+          drone_prev_cmd[drone] = proto_cmd;
           success = true;
           break;
         }
@@ -341,8 +343,8 @@ unique_ptr<Solution> RandomSolver::Solve() {
               ->RemoveLast();
           decision_schedule.push({t, drone});
         }
-        //LOG(INFO) << "Success " << success;
-        //dbg_print();
+        // LOG(INFO) << "Success " << success;
+        // dbg_print();
         continue;
       }
       // Generate a UNLOAD.
@@ -351,27 +353,27 @@ unique_ptr<Solution> RandomSolver::Solve() {
         // should wait.
         if (pending_products.empty()) {
           if (drone_inventory.count(drone) == 0) {
-            //LOG(INFO) << "UNLOAD -> WAIT";
+            // LOG(INFO) << "UNLOAD -> WAIT";
             goto gen_wait;
           } else {
-            //LOG(INFO) << "UNLOAD -> DELIVER";
+            // LOG(INFO) << "UNLOAD -> DELIVER";
             goto gen_deliver;
           }
         }
 
         // Nothing to UNLOAD, do something else.
         if (drone_inventory[drone].empty()) {
-          //LOG(INFO) << "UNLOAD -> CHOOSE AGAIN";
+          // LOG(INFO) << "UNLOAD -> CHOOSE AGAIN";
           goto choose_command_type;
         }
 
-        //LOG(INFO) << "Generating UNLOAD  : drone " << drone << " t " << t
+        // LOG(INFO) << "Generating UNLOAD  : drone " << drone << " t " << t
         //          << " ol " << pending_orders.size();
-        //dbg_print();
+        // dbg_print();
 
         proto_cmd->set_type(DroneCommand_CommandType_UNLOAD);
         proto_cmd->set_start_time(t);
-        proto_cmd->set_drone_id(drone);
+        proto_cmd->set_drone(drone);
 
         // Choose a random warehouse.
         int warehouse = otgen(0, problem_.nw() - 1);
@@ -420,31 +422,33 @@ unique_ptr<Solution> RandomSolver::Solve() {
         // If the command will exceed simulation time, just remove it from the
         // solution, to keep it valid.
         if (t + d > problem_.t()) {
-          solution->mutable_drone_desc(drone)->mutable_drone_command()->RemoveLast();
+          solution->mutable_drone_desc(drone)
+              ->mutable_drone_command()
+              ->RemoveLast();
         }
         drone_loc[drone] = warehouse;
         drone_prev_cmd[drone] = proto_cmd;
-        //LOG(INFO) << "Impact: ";
-        //dbg_print();
+        // LOG(INFO) << "Impact: ";
+        // dbg_print();
         continue;
       }
       // Generate a DELIVER.
       if (cmd_rand <= (cap += FLAGS_random_solver_deliver_percentage)) {
         if (drone_inventory.count(drone) == 0) {
           // Nothing to DELIVER, do something else.
-          //LOG(INFO) << "DELIVER -> CHOOSE AGAIN";
+          // LOG(INFO) << "DELIVER -> CHOOSE AGAIN";
           goto choose_command_type;
         }
 
       gen_deliver:
 
-        //LOG(INFO) << "Generating DELIVER : drone " << drone << " t " << t
+        // LOG(INFO) << "Generating DELIVER : drone " << drone << " t " << t
         //          << " ol " << pending_orders.size();
-        //dbg_print();
+        // dbg_print();
 
         proto_cmd->set_type(DroneCommand_CommandType_DELIVER);
         proto_cmd->set_start_time(t);
-        proto_cmd->set_drone_id(drone);
+        proto_cmd->set_drone(drone);
 
         // Since it can easily happen that the drone is not carrying any items
         // needed for the randomly choosen order, let's do two layers of trying,
@@ -499,13 +503,15 @@ unique_ptr<Solution> RandomSolver::Solve() {
                 pending_orders.pop_back();
               }
             }
-            
-            int d = dist(order + problem_.nw(), drone_loc[drone]);  
+
+            int d = dist(order + problem_.nw(), drone_loc[drone]);
             decision_schedule.push(make_pair(t + d + 1, drone));
-            // If the command will exceed simulation time, just remove it from the
-            // solution, to keep it valid.
+            // If the command will exceed simulation time, just remove it from
+            // the solution, to keep it valid.
             if (t + d > problem_.t()) {
-              solution->mutable_drone_desc(drone)->mutable_drone_command()->RemoveLast();
+              solution->mutable_drone_desc(drone)
+                  ->mutable_drone_command()
+                  ->RemoveLast();
             }
             drone_loc[drone] = order + problem_.nw();
             drone_prev_cmd[drone] = proto_cmd;
@@ -521,8 +527,8 @@ unique_ptr<Solution> RandomSolver::Solve() {
           decision_schedule.push({t, drone});
         }
 
-        //LOG(INFO) << "Succcess: " << success;
-        //dbg_print();
+        // LOG(INFO) << "Succcess: " << success;
+        // dbg_print();
         continue;
       }
       CHECK(false);
@@ -533,4 +539,3 @@ unique_ptr<Solution> RandomSolver::Solve() {
 }
 
 }  // namespace drones
-

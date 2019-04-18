@@ -1,4 +1,4 @@
-#include "sp1_solver.h"
+#include "solvers/sp1_solver/sp1_solver.h"
 
 #include <algorithm>
 #include <cmath>
@@ -25,7 +25,7 @@ std::unique_ptr<Solution> Sp1Solver::Solve() {
   {
     auto* cmd = drone_commands->add_drone_command();
     cmd->set_type(DroneCommand_CommandType_LOAD);
-    cmd->set_drone_id(0);
+    cmd->set_drone(0);
     cmd->set_warehouse(0);
     cmd->set_product(0);
     cmd->set_num_items(1);
@@ -43,7 +43,7 @@ std::unique_ptr<Solution> Sp1Solver::Solve() {
       }
       auto* cmd = drone_commands->add_drone_command();
       cmd->set_type(DroneCommand_CommandType_DELIVER);
-      cmd->set_drone_id(0);
+      cmd->set_drone(0);
       cmd->set_order(order.second);
       cmd->set_product(0);
       cmd->set_num_items(1);
@@ -59,7 +59,7 @@ std::unique_ptr<Solution> Sp1Solver::Solve() {
       }
       auto* cmd = drone_commands->add_drone_command();
       cmd->set_type(DroneCommand_CommandType_LOAD);
-      cmd->set_drone_id(0);
+      cmd->set_drone(0);
       cmd->set_warehouse(0);
       cmd->set_product(0);
       cmd->set_num_items(1);

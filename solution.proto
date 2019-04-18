@@ -12,7 +12,7 @@ message DroneCommand {
     WAIT = 3;
   }
   optional CommandType type = 1;
-  optional int32 drone_id = 2;
+  optional int32 drone = 2;
   optional int32 start_time = 3;
   // Used for LOAD, UNLOAD and DELIVER.
   optional int32 product = 4;

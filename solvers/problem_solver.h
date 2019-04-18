@@ -1,5 +1,5 @@
-#ifndef PROBLEM_SOLVER_H_
-#define PROBLEM_SOLVER_H_
+#ifndef SOLVERS_PROBLEM_SOLVER_H_
+#define SOLVERS_PROBLEM_SOLVER_H_
 
 #include "problem.pb.h"
 #include "solution.pb.h"
@@ -21,4 +21,4 @@ class ProblemSolver {
 
 }  // namespace drones
 
-#endif  // PROBLEM_SOLVER_H_
+#endif  // SOLVERS_PROBLEM_SOLVER_H_

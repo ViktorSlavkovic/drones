@@ -1,5 +1,5 @@
-#ifndef LP_UTIL_H_
-#define LP_UTIL_H_
+#ifndef SOLVERS_UTIL_LP_UTIL_H_
+#define SOLVERS_UTIL_LP_UTIL_H_
 
 #include <unordered_map>
 #include <string>
@@ -7,7 +7,8 @@
 #include "google/protobuf/message.h"
 
 namespace drones {
-namespace lin_prog {
+namespace util {
+namespace lp {
 
 // Polynomial consisting of the decision variables.
 struct Polynomial {
@@ -33,7 +34,8 @@ struct Polynomial {
 
 std::string& SavyProtoHash(const google::protobuf::Message& proto);
 
-}  // namespace lin_prog
+}  // namespace lp
+}  // namespace util
 }  // namespace drones
 
-#endif  // LP_UTIL_H_
+#endif  // SOLVERS_UTIL_LP_UTIL_H_

@@ -1,12 +1,12 @@
-#include "problem_solver_factory.h"
+#include "solvers/problem_solver_factory.h"
 
-#include "ecf_solver.h"
 #include "glog/logging.h"
-#include "lp_solver.h"
-#include "random_solver.h"
-#include "sp1_solver.h"
-#include "sp2_solver.h"
-#include "sp4_solver.h"
+#include "solvers/ecf_solver/ecf_solver.h"
+#include "solvers/lp_solver/lp_solver.h"
+#include "solvers/random_solver/random_solver.h"
+#include "solvers/sp1_solver/sp1_solver.h"
+#include "solvers/sp2_solver/sp2_solver.h"
+#include "solvers/sp4_solver/sp4_solver.h"
 
 namespace drones {
 
