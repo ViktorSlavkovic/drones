@@ -11,6 +11,7 @@ cc_library(
         "//solvers:problem_solver",
         "//solvers/util:allocator",
         "//solvers/util:load_splitter",
+        "@com_github_gflags_gflags//:gflags",
         "@com_github_glog_glog//:glog",
         "@com_google_absl//absl/strings",
     ],

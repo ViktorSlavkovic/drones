@@ -19,7 +19,13 @@ using lp::SavyProtoHash;
 using operations_research::MPSolver;
 using operations_research::MPVariable;
 
-Allocator::Alloc Allocator::Allocate(const Problem& problem) {
+Allocator::Alloc Allocator::Allocate(const Problem& problem,
+                                     Feedback* feedback) {
+  if (feedback != nullptr && !feedback->empty()) {
+    LOG(INFO) << "We have some feedback!";
+  } else {
+    LOG(INFO) << "No feedback.";
+  }
   // Create solver.
   MPSolver solver("delivery", MPSolver::GLOP_LINEAR_PROGRAMMING);
   const double inf = solver.infinity();
@@ -45,10 +51,17 @@ Allocator::Alloc Allocator::Allocate(const Problem& problem) {
           if (problem.warehouse(warehouse).stock(product) == 0) continue;
           var_desc.set_product(product);
 
+          double coef = 1.0;
+          if (feedback != nullptr &&
+              feedback->count(order) &&
+              feedback->at(order).count(warehouse)) {
+            coef = (*feedback)[order][warehouse];
+          }
+
           const auto& var_hash = SavyProtoHash(var_desc);
           vars[var_hash] = solver.MakeNumVar(
               0, problem.order(order).request(product), var_hash);
-          objective->SetCoefficient(vars[var_hash], 2.0 * d);
+          objective->SetCoefficient(vars[var_hash], 2.0 * d * coef);
         }
       }
     }
