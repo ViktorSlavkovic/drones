@@ -10,6 +10,7 @@ cc_library(
         "//:solution_cc_proto",
         "//solvers:problem_solver",
         "//solvers/util:allocator",
+        "//solvers/util:load_splitter",
         "@com_github_glog_glog//:glog",
         "@com_google_absl//absl/strings",
     ],

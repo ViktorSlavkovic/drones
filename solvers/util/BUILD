@@ -12,6 +12,16 @@ cc_library(
 )
 
 cc_library(
+    name = "load_splitter",
+    srcs = ["load_splitter.cc"],
+    hdrs = ["load_splitter.h"],
+    linkstatic = True,
+    deps = [
+        "@com_github_glog_glog//:glog",
+    ],
+)
+
+cc_library(
     name = "allocator",
     srcs = ["allocator.cc"],
     hdrs = ["allocator.h"],

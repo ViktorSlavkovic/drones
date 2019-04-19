@@ -11,6 +11,7 @@
 #include "absl/strings/substitute.h"
 #include "glog/logging.h"
 #include "solvers/util/allocator.h"
+#include "solvers/util/load_splitter.h"
 #include "solvers/util/lp_util.h"
 
 namespace drones {
@@ -29,6 +30,43 @@ std::unique_ptr<Solution> EcfSolver::Solve() {
   }
   LOG(INFO) << "Successfully allocated.";
 
+  std::map<int, int> product_weights;
+  for (int p = 0; p < problem_.np(); p++) {
+    product_weights[p] = problem_.product(p).m();
+  }
+
+  LOG(INFO) << "Making the (order, warehouse) splits to drones.";
+  // [order][warehouse] -> split
+  std::vector<std::map<int, util::LoadSplitter::CompleteSplit>> order_splits(
+      problem_.no());
+  for (int o = 0; o < problem_.no(); o++) {
+    // [product] -> num items
+    std::map<int, int> from_curr_w;
+    int prev_w = -1;
+    auto calc_and_add_split = [&]() {
+      if (from_curr_w.empty()) return;
+      CHECK(prev_w >= 0);
+      CHECK(prev_w < problem_.no());
+      auto split =
+          util::LoadSplitter::Split(from_curr_w, product_weights, problem_.m());
+      order_splits[o][prev_w] = split;
+    };
+    for (const auto& wp_i : alloc[o]) {
+      int w = wp_i.first.first;
+      int p = wp_i.first.second;
+      int n = wp_i.second;
+      CHECK(n > 0);
+      if (prev_w != w) {
+        calc_and_add_split();
+        from_curr_w.clear();
+      }
+      from_curr_w[p] = n;
+      prev_w = w;
+    }
+    calc_and_add_split();
+  }
+  LOG(INFO) << "Successfully split.";
+
   // Let's compute approximate completion time for each order:
   //   * we know exact LOAD time for all items except the first one, since we
   //     know all the alloc pairs and we're always coming from the current
@@ -39,18 +77,20 @@ std::unique_ptr<Solution> EcfSolver::Solve() {
   //   So, order completion time is: T = Lall + Dall
   //
   // Vector order_durations stores pairs {duration, order}, in ascending order.
+  //
+  // TODO(viktors): Add average previous order to average warehouse (in current
+  //                 order) to the completion time.
   std::vector<std::pair<int, int>> order_durations;
   {
     for (int o = 0; o < problem_.no(); o++) {
       int ox = problem_.order(o).location().x();
       int oy = problem_.order(o).location().y();
       int completion_time = 0;
-      for (const auto& wp_items : alloc[o]) {
-        CHECK(wp_items.second >= 0);
-        int dx = ox - problem_.warehouse(wp_items.first.first).location().x();
-        int dy = oy - problem_.warehouse(wp_items.first.first).location().y();
-        completion_time +=
-            2 * wp_items.second * (ceil(sqrt(dx * dx + dy * dy)) + 1);
+      for (const auto& w_split : order_splits[o]) {
+        int dx = ox - problem_.warehouse(w_split.first).location().x();
+        int dy = oy - problem_.warehouse(w_split.first).location().y();
+        completion_time += 2 * w_split.second.total_times *
+                           (ceil(sqrt(dx * dx + dy * dy)) + 1);
       }
       order_durations.push_back({completion_time, o});
     }
@@ -63,17 +103,12 @@ std::unique_ptr<Solution> EcfSolver::Solve() {
                                        problem_.warehouse(0).location());
 
   // For each order, we'll repeatedly match a warehouse and a drone (earliest
-  // ending time of LOAD + DELIVER) and do a knapsack packing of the items to
-  // maximize used volume.
+  // ending time of LOAD + DELIVER) and pack the drone according to the
+  // previously calculated split.
   //
-  // Important: Sure, finding the best match depends on the number of product
-  // types we're packing since loading of each costs 1 time moment, but we'll
-  // assume that the cost of travel is much greater than that!
-  //
-  // best volume usage at each volume
-  std::vector<int> knapsack_best(problem_.m() + 1);
-  // [volume][product] -> num_items - taken items at each volume
-  std::vector<std::map<int, int>> knapsack_taken(problem_.m() + 1);
+  // Note: Sure, finding the best match depends on the number of product types
+  // we're packing since loading of each costs 1 time moment, but we'll assume
+  // that the cost of travel is much greater than that!
 
   // Handle orders one by one.
   int num_order = 0;
@@ -83,15 +118,6 @@ std::unique_ptr<Solution> EcfSolver::Solve() {
 
     int o = od.second;
 
-    // [warehouse][product] -> num_items
-    std::map<int, std::map<int, int>> pending_warehouses;
-    for (const auto& wp_items : alloc[o]) {
-      CHECK(wp_items.second > 0);
-      pending_warehouses[wp_items.first.first][wp_items.first.second] +=
-          wp_items.second;
-    }
-    CHECK(!pending_warehouses.empty());
-
     // Number of commands executed by each drone for this order. Used to
     // roll-back the commands in case of an unsuccessfull matching, so that an
     // another order can be given a chance.
@@ -99,12 +125,8 @@ std::unique_ptr<Solution> EcfSolver::Solve() {
 
     auto calc_total_pending_items = [&]() {
       int res = 0;
-      for (const auto& w_pi : pending_warehouses) {
-        int total_wh = 0;
-        for (const auto& pi : w_pi.second) {
-          CHECK(pi.second > 0);
-          total_wh += pi.second;
-        }
+      for (const auto& w_split : order_splits[o]) {
+        int total_wh = w_split.second.total_num_items;
         CHECK(total_wh > 0);
         res += total_wh;
       }
@@ -117,8 +139,7 @@ std::unique_ptr<Solution> EcfSolver::Solve() {
     CHECK(total_pending_items > 1);
     LOG(INFO) << "  Initial pending items: " << total_pending_items - 1;
     int num_warehouse = 0;
-
-    while (!pending_warehouses.empty()) {
+    while (!order_splits[o].empty()) {
       int curr_total_pending_items = calc_total_pending_items();
       CHECK(curr_total_pending_items > 0)
           << curr_total_pending_items << " > " << 0;
@@ -133,8 +154,8 @@ std::unique_ptr<Solution> EcfSolver::Solve() {
       int best_d = -1;
       int best_t = std::numeric_limits<int>::max();  // Earliest ending time.
       bool match_found = false;
-      for (const auto& w_pi : pending_warehouses) {
-        int w = w_pi.first;
+      for (const auto& w_split : order_splits[o]) {
+        int w = w_split.first;
         for (int d = 0; d < problem_.nd(); d++) {
           int t = drone_busy_until[d];
           // LOAD dutation = dist to warehouse + 1
@@ -184,37 +205,7 @@ std::unique_ptr<Solution> EcfSolver::Solve() {
         break;
       }
 
-      // Yay, we have the match! Let's knapsack-pack the product items then.
-      // LOG(INFO) << "    Knapsack";
-      knapsack_best[0] = 0;
-      knapsack_taken[0].clear();
-      int drone_cap = problem_.m();
-      for (int volume = 1; volume <= drone_cap; volume++) {
-        knapsack_best[volume] = 0;
-        knapsack_taken[volume].clear();
-        for (const auto& pi : pending_warehouses[best_w]) {
-          int p = pi.first;
-          int pm = problem_.product(p).m();
-          if (volume < pm) continue;
-          // Let's try to add one item of p to volume - pm case.
-          if (pm + knapsack_best[volume - pm] > knapsack_best[volume] &&
-              knapsack_taken[volume - pm][p] + 1 <= pi.second) {
-            // Ouch! Expensive!
-            knapsack_taken[volume] = knapsack_taken[volume - pm];
-            knapsack_taken[volume][p]++;
-            knapsack_best[volume] = knapsack_best[volume - pm] + pm;
-            continue;
-          }
-          // If not, let's see if original volume - pm case is still better
-          // then what we have now.
-          if (knapsack_best[volume - pm] > knapsack_best[volume]) {
-            // Ouch! Expensive!
-            knapsack_taken[volume] = knapsack_taken[volume - pm];
-            knapsack_best[volume] = knapsack_best[volume - pm];
-          }
-        }
-      }
-      CHECK(knapsack_best[drone_cap] > 0);
+      auto load = order_splits[o][best_w].repeated_splits.front().single_split;
 
       int curr_drone_busy_until = drone_busy_until[best_d];
 
@@ -226,7 +217,7 @@ std::unique_ptr<Solution> EcfSolver::Solve() {
         int dy = drone_location[best_d].y() -
                  problem_.warehouse(best_w).location().y();
         int dist = ceil(sqrt(dx * dx + dy * dy));
-        for (const auto& pi : knapsack_taken[problem_.m()]) {
+        for (const auto& pi : load) {
           if (pi.second < 1) continue;
           num_drone_commands[best_d]++;
           auto* cmd = solution->mutable_drone_desc(best_d)->add_drone_command();
@@ -253,7 +244,7 @@ std::unique_ptr<Solution> EcfSolver::Solve() {
         int dy = problem_.order(o).location().y() -
                  problem_.warehouse(best_w).location().y();
         int dist = ceil(sqrt(dx * dx + dy * dy));
-        for (const auto& pi : knapsack_taken[problem_.m()]) {
+        for (const auto& pi : load) {
           if (pi.second < 1) continue;
           num_drone_commands[best_d]++;
           auto* cmd = solution->mutable_drone_desc(best_d)->add_drone_command();
@@ -277,15 +268,15 @@ std::unique_ptr<Solution> EcfSolver::Solve() {
       // LOG(INFO) << "    Success, updating.";
       drone_location[best_d] = problem_.order(o).location();
       drone_busy_until[best_d] = curr_drone_busy_until;
-      for (const auto& pi : knapsack_taken[problem_.m()]) {
-        pending_warehouses[best_w][pi.first] -= pi.second;
-        if (pending_warehouses[best_w][pi.first] == 0) {
-          pending_warehouses[best_w].erase(pi.first);
-          if (pending_warehouses[best_w].empty()) {
-            pending_warehouses.erase(best_w);
-            num_warehouse++;
-            LOG(INFO) << "  Warehouses done: " << num_warehouse;
-          }
+      order_splits[o][best_w].total_times--;
+      order_splits[o][best_w].total_num_items -=
+          order_splits[o][best_w].repeated_splits.front().num_items;
+      if ((order_splits[o][best_w].repeated_splits.front().times -= 1) == 0) {
+        order_splits[o][best_w].repeated_splits.pop_front();
+        if (order_splits[o][best_w].total_times == 0) {
+          order_splits[o].erase(best_w);
+          num_warehouse++;
+          LOG(INFO) << "  Warehouses done: " << num_warehouse;
         }
       }
     }

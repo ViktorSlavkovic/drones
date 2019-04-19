@@ -48,7 +48,7 @@ Allocator::Alloc Allocator::Allocate(const Problem& problem) {
           const auto& var_hash = SavyProtoHash(var_desc);
           vars[var_hash] = solver.MakeNumVar(
               0, problem.order(order).request(product), var_hash);
-          objective->SetCoefficient(vars[var_hash], 2 * d);
+          objective->SetCoefficient(vars[var_hash], 2.0 * d);
         }
       }
     }
