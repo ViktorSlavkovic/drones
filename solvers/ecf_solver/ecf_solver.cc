@@ -77,21 +77,49 @@ std::unique_ptr<Solution> EcfSolver::Solve() {
   //   So, order completion time is: T = Lall + Dall
   //
   // Vector order_durations stores pairs {duration, order}, in ascending order.
-  //
-  // TODO(viktors): Add average previous order to average warehouse (in current
-  //                 order) to the completion time.
   std::vector<std::pair<int, int>> order_durations;
   {
+    // Sum of all locations devided by num locations - 1, so that we can easily
+    // calculate mean of other locations for each location.
+    double mox = 0.0;
+    double moy = 0.0;
+    if (problem_.no() > 1) {
+      for (int o1 = 0; o1 < problem_.no(); o1++) {
+        mox += static_cast<double>(problem_.order(o1).location().x()) /
+               (problem_.no() - 1);
+        moy += static_cast<double>(problem_.order(o1).location().y()) /
+               (problem_.no() - 1);
+      }
+    }
+
     for (int o = 0; o < problem_.no(); o++) {
       int ox = problem_.order(o).location().x();
       int oy = problem_.order(o).location().y();
+      // Mean prevoius order location.
+      double mpox = 0;
+      double mpoy = 0;
+      if (problem_.no() > 1) {
+        mpox = mox - static_cast<double>(ox) / (problem_.no() - 1);
+        mpoy = moy - static_cast<double>(oy) / (problem_.no() - 1);
+      }
+      // Mean amoung current warehouses.
+      double mwx = 0;
+      double mwy = 0;
       int completion_time = 0;
       for (const auto& w_split : order_splits[o]) {
-        int dx = ox - problem_.warehouse(w_split.first).location().x();
-        int dy = oy - problem_.warehouse(w_split.first).location().y();
-        completion_time += 2 * w_split.second.total_times *
+        double wx = problem_.warehouse(w_split.first).location().x();
+        double wy = problem_.warehouse(w_split.first).location().y();
+        mwx += wx / order_splits[o].size();
+        mwy += wy / order_splits[o].size();
+        double dx = ox - wx;
+        double dy = oy - wy;
+        completion_time += (2.0 - 1.0 / order_splits[o].size()) *
+                           w_split.second.total_times *
                            (ceil(sqrt(dx * dx + dy * dy)) + 1);
       }
+      double dx = mpox - mwx;
+      double dy = mpoy - mwy;
+      completion_time += ceil(sqrt(dx * dx + dy * dy)) + 1;
       order_durations.push_back({completion_time, o});
     }
     std::sort(order_durations.begin(), order_durations.end());

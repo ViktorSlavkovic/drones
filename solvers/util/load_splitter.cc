@@ -19,14 +19,14 @@ LoadSplitter::CompleteSplit LoadSplitter::Split(
   static std::vector<std::map<int, int>> knapsack_taken;
   // Number of taken items (2 apples + 3 oranges = 5 items) at each volumes.
   static std::vector<int> knapsack_taken_items;
-  
+
   knapsack_best.resize(total_volume + 1);
   knapsack_best[0] = 0;
   knapsack_taken.resize(total_volume + 1);
   knapsack_taken[0].clear();
   knapsack_taken_items.resize(total_volume + 1);
   knapsack_taken_items[0] = 0;
-  
+
   // Make sure that the stock is "compact" - no products listed which are out
   // of stock.
   for (auto cit = stock.cbegin(); cit != stock.cend();) {
@@ -40,7 +40,6 @@ LoadSplitter::CompleteSplit LoadSplitter::Split(
   CompleteSplit res{.total_num_items = 0, .total_times = 0};
 
   while (!stock.empty()) {
-    
     // Knapsack-pack to fill as much volume as possible.
     for (int vol = 1; vol <= total_volume; vol++) {
       knapsack_best[vol] = 0;
@@ -52,7 +51,11 @@ LoadSplitter::CompleteSplit LoadSplitter::Split(
         int pv = volumes.at(p);
         if (vol < pv) continue;
         // Let's try to add one item of p to volume - pv case.
-        if (pv + knapsack_best[vol - pv] > knapsack_best[vol] &&
+        if ((pv + knapsack_best[vol - pv] > knapsack_best[vol] ||
+             (pv + knapsack_best[vol - pv] == knapsack_best[vol] &&
+              knapsack_taken[vol - pv].size() + 1 -
+              knapsack_taken[vol - pv].count(p) < 
+              knapsack_taken[vol].size())) &&
             knapsack_taken[vol - pv][p] + 1 <= cap) {
           // Ouch! Expensive!
           knapsack_taken[vol] = knapsack_taken[vol - pv];
@@ -63,7 +66,9 @@ LoadSplitter::CompleteSplit LoadSplitter::Split(
         }
         // If not, let's see if original volume - pv case is still better
         // then what we have now.
-        if (knapsack_best[vol - pv] > knapsack_best[vol]) {
+        if (knapsack_best[vol - pv] > knapsack_best[vol] ||
+            (knapsack_best[vol - pv] == knapsack_best[vol] &&
+             knapsack_taken[vol].size() > knapsack_taken[vol - pv].size())) {
           // Ouch! Expensive!
           knapsack_taken[vol] = knapsack_taken[vol - pv];
           knapsack_taken_items[vol] = knapsack_taken_items[vol - pv];
