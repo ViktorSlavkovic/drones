@@ -10,8 +10,8 @@
 namespace drones {
 namespace util {
 
-LoadSplitter::CompleteSplit LoadSplitter::Split(
-    std::map<int, int> stock, const std::map<int, int>& volumes,
+LoadSplitter::RepeatedSplit LoadSplitter::SplitOnce(
+    const std::map<int, int>& stock, const std::map<int, int>& volumes,
     int total_volume) {
   // Best volume usage at each volume.
   static std::vector<int> knapsack_best;
@@ -27,6 +27,59 @@ LoadSplitter::CompleteSplit LoadSplitter::Split(
   knapsack_taken_items.resize(total_volume + 1);
   knapsack_taken_items[0] = 0;
 
+  for (int vol = 1; vol <= total_volume; vol++) {
+    knapsack_best[vol] = 0;
+    knapsack_taken[vol].clear();
+    knapsack_taken_items[vol] = 0;
+    for (const auto& pi : stock) {
+      int p = pi.first;
+      int cap = pi.second;
+      int pv = volumes.at(p);
+      if (vol < pv) continue;
+      // Let's try to add one item of p to volume - pv case.
+      if ((pv + knapsack_best[vol - pv] > knapsack_best[vol] ||
+           (pv + knapsack_best[vol - pv] == knapsack_best[vol] &&
+            knapsack_taken[vol - pv].size() + 1 -
+                    knapsack_taken[vol - pv].count(p) <
+                knapsack_taken[vol].size())) &&
+          knapsack_taken[vol - pv][p] + 1 <= cap) {
+        // Ouch! Expensive!
+        knapsack_taken[vol] = knapsack_taken[vol - pv];
+        knapsack_taken[vol][p]++;
+        knapsack_taken_items[vol] = knapsack_taken_items[vol - pv] + 1;
+        knapsack_best[vol] = knapsack_best[vol - pv] + pv;
+        continue;
+      }
+      // If not, let's see if original volume - pv case is still better
+      // then what we have now.
+      if (knapsack_best[vol - pv] > knapsack_best[vol] ||
+          (knapsack_best[vol - pv] == knapsack_best[vol] &&
+           knapsack_taken[vol].size() > knapsack_taken[vol - pv].size())) {
+        // Ouch! Expensive!
+        knapsack_taken[vol] = knapsack_taken[vol - pv];
+        knapsack_taken_items[vol] = knapsack_taken_items[vol - pv];
+        knapsack_best[vol] = knapsack_best[vol - pv];
+      }
+    }
+  }
+
+  // Calculate how many times we can do the same.
+  int num_times = std::numeric_limits<int>::max();
+  for (const auto& pi : knapsack_taken[total_volume]) {
+    if (pi.second == 0) continue;
+    int max_times = stock.at(pi.first) / pi.second;
+    num_times = std::min(num_times, max_times);
+  }
+  CHECK(num_times > 0);
+
+  return {.num_items = knapsack_taken_items[total_volume],
+          .times = num_times,
+          .single_split = knapsack_taken[total_volume]};
+}
+
+LoadSplitter::CompleteSplit LoadSplitter::Split(
+    std::map<int, int> stock, const std::map<int, int>& volumes,
+    int total_volume) {
   // Make sure that the stock is "compact" - no products listed which are out
   // of stock.
   for (auto cit = stock.cbegin(); cit != stock.cend();) {
@@ -41,65 +94,19 @@ LoadSplitter::CompleteSplit LoadSplitter::Split(
 
   while (!stock.empty()) {
     // Knapsack-pack to fill as much volume as possible.
-    for (int vol = 1; vol <= total_volume; vol++) {
-      knapsack_best[vol] = 0;
-      knapsack_taken[vol].clear();
-      knapsack_taken_items[vol] = 0;
-      for (const auto& pi : stock) {
-        int p = pi.first;
-        int cap = pi.second;
-        int pv = volumes.at(p);
-        if (vol < pv) continue;
-        // Let's try to add one item of p to volume - pv case.
-        if ((pv + knapsack_best[vol - pv] > knapsack_best[vol] ||
-             (pv + knapsack_best[vol - pv] == knapsack_best[vol] &&
-              knapsack_taken[vol - pv].size() + 1 -
-              knapsack_taken[vol - pv].count(p) < 
-              knapsack_taken[vol].size())) &&
-            knapsack_taken[vol - pv][p] + 1 <= cap) {
-          // Ouch! Expensive!
-          knapsack_taken[vol] = knapsack_taken[vol - pv];
-          knapsack_taken[vol][p]++;
-          knapsack_taken_items[vol] = knapsack_taken_items[vol - pv] + 1;
-          knapsack_best[vol] = knapsack_best[vol - pv] + pv;
-          continue;
-        }
-        // If not, let's see if original volume - pv case is still better
-        // then what we have now.
-        if (knapsack_best[vol - pv] > knapsack_best[vol] ||
-            (knapsack_best[vol - pv] == knapsack_best[vol] &&
-             knapsack_taken[vol].size() > knapsack_taken[vol - pv].size())) {
-          // Ouch! Expensive!
-          knapsack_taken[vol] = knapsack_taken[vol - pv];
-          knapsack_taken_items[vol] = knapsack_taken_items[vol - pv];
-          knapsack_best[vol] = knapsack_best[vol - pv];
-        }
-      }
-    }
-
-    // Calculate how many times we can do the same.
-    int num_times = std::numeric_limits<int>::max();
-    for (const auto& pi : knapsack_taken[total_volume]) {
-      if (pi.second == 0) continue;
-      int max_times = stock[pi.first] / pi.second;
-      num_times = std::min(num_times, max_times);
-    }
-    CHECK(num_times > 0);
+    auto repeated_split = SplitOnce(stock, volumes, total_volume);
 
     // Remove from the stock.
-    for (const auto& pi : knapsack_taken[total_volume]) {
-      if ((stock[pi.first] -= pi.second * num_times) == 0) {
+    for (const auto& pi : repeated_split.single_split) {
+      if ((stock[pi.first] -= pi.second * repeated_split.times) == 0) {
         stock.erase(pi.first);
       }
     }
 
     // Add to the result.
-    res.repeated_splits.push_back(
-        {.num_items = knapsack_taken_items[total_volume],
-         .times = num_times,
-         .single_split = knapsack_taken[total_volume]});
-    res.total_num_items += num_times * knapsack_taken_items[total_volume];
-    res.total_times += num_times;
+    res.repeated_splits.push_back(repeated_split);
+    res.total_num_items += repeated_split.times * repeated_split.num_items;
+    res.total_times += repeated_split.times;
   }
 
   return res;

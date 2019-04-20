@@ -9,17 +9,33 @@ namespace util {
 
 class LoadSplitter {
  public:
+  // Describes one drone packing, maps products to numbers of ther items taken.
+  using SingleSplit = std::map<int, int>;
+  struct RepeatedSplit {
+    // Num items in one turn.
+    int num_items;
+    // How many times the turn can be repeated.
+    int times;
+    SingleSplit single_split;
+  };
   struct CompleteSplit {
-    struct RepeatedSplit {
-      int num_items;
-      int times;
-      std::map<int, int> single_split;
-    };
     int total_num_items;
     int total_times;
     std::list<RepeatedSplit> repeated_splits;
   };
+  
+  // Pack one drone capacity from the given stock. Repeated split is returned
+  // in order to export information about how many items are taken per turn and
+  // how many times the same packing can be done.
+  // Assuming that the stock is "compact" - no products listed which are out of
+  // stock.
+  static RepeatedSplit SplitOnce(const std::map<int, int>& stock,
+                                 const std::map<int, int>& volumes,
+                                 int total_volume);
 
+  // Split one (warehouse) stock to multiple drone turns.
+  // No assumptions are made about whether the stock is "compact" (see
+  // SplitOnce) or not.
   static CompleteSplit Split(std::map<int, int> stock,
                              const std::map<int, int>& volumes,
                              int total_volume);
