@@ -19,17 +19,6 @@
 namespace drones {
 
 std::unique_ptr<Solution> CwfSolver::Solve() {
-  // Allocate.
-  auto alloc = util::Allocator::Allocate(problem_);
-  CHECK(util::Allocator::VerifyAlloc(problem_, alloc)) << "Invalid alloc!";
-  LOG(INFO) << "Successfully allocated.";
-
-  // Needed for LoadSplitter::Split.
-  std::map<int, int> product_weights;
-  for (int p = 0; p < problem_.np(); p++) {
-    product_weights[p] = problem_.product(p).m();
-  }
-
   // Closest warehouses.
   std::vector<int> closest_w(problem_.no());
   for (int o = 0; o < problem_.no(); o++) {
@@ -50,6 +39,31 @@ std::unique_ptr<Solution> CwfSolver::Solve() {
     closest_w[o] = best_w;
   }
 
+  // Allocate.
+  util::Allocator::DistFn dist_fn = [&](int o, int w, int p) {
+    double dx_o =
+        problem_.warehouse(w).location().x() - problem_.order(o).location().x();
+    double dy_o =
+        problem_.warehouse(w).location().y() - problem_.order(o).location().y();
+    double d_o = ceil(sqrt(dx_o * dx_o + dy_o * dy_o)) + 1;
+    double dx_w = problem_.warehouse(w).location().x() -
+                  problem_.warehouse(closest_w.at(o)).location().x();
+    double dy_w = problem_.warehouse(w).location().y() -
+                  problem_.warehouse(closest_w.at(o)).location().y();
+    double d_w = ceil(sqrt(dx_w * dx_w + dy_w * dy_w)) + 1;
+    double d = std::min(d_o, d_w);
+    return 2.0 * d;
+  };
+  auto alloc = util::Allocator::AllocateWithDistFn(problem_, dist_fn);
+  CHECK(util::Allocator::VerifyAlloc(problem_, alloc)) << "Invalid alloc!";
+  LOG(INFO) << "Successfully allocated.";
+  
+  // Needed for LoadSplitter::Split.
+  std::map<int, int> product_weights;
+  for (int p = 0; p < problem_.np(); p++) {
+    product_weights[p] = problem_.product(p).m();
+  }
+  
   // Oder permutation.
   std::vector<int> order_perm;
   {

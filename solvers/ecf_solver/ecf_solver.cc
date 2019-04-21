@@ -29,14 +29,30 @@ EcfSolver::OrderSplits EcfSolver::IterativeSplit(int num_iter) const {
   for (int p = 0; p < problem_.np(); p++) {
     product_weights[p] = problem_.product(p).m();
   }
+  
+  // [order][warehouse] -> coefficient
+  using Feedback = std::map<int, std::map<int, double>>;
 
   OrderSplits res;
-  util::Allocator::Feedback allocator_feedback;
+  Feedback allocator_feedback;
+
+  util::Allocator::DistFn dist_fn = [&](int o, int w, int p) {
+    double dx =
+        problem_.warehouse(w).location().x() - problem_.order(o).location().x();
+    double dy =
+        problem_.warehouse(w).location().y() - problem_.order(o).location().y();
+    double d = ceil(sqrt(dx * dx + dy * dy)) + 1;
+    double coef = 1.0;
+    if (allocator_feedback.count(o) && allocator_feedback.at(o).count(w)) {
+      coef = allocator_feedback[o][w];
+    }
+    return 2.0 * d * coef;
+  };
 
   for (int iter = 1; iter <= num_iter; iter++) {
     LOG(INFO) << absl::Substitute("*** Split iter $0 / $1", iter, num_iter);
 
-    auto alloc = util::Allocator::Allocate(problem_, &allocator_feedback);
+    auto alloc = util::Allocator::AllocateWithDistFn(problem_, dist_fn);
     CHECK(util::Allocator::VerifyAlloc(problem_, alloc)) << "Invalid alloc!";
     LOG(INFO) << "Successfully allocated.";
 

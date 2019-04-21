@@ -19,13 +19,8 @@ using lp::SavyProtoHash;
 using operations_research::MPSolver;
 using operations_research::MPVariable;
 
-Allocator::Alloc Allocator::Allocate(const Problem& problem,
-                                     Feedback* feedback) {
-  if (feedback != nullptr && !feedback->empty()) {
-    LOG(INFO) << "We have some feedback!";
-  } else {
-    LOG(INFO) << "No feedback.";
-  }
+Allocator::Alloc Allocator::AllocateWithDistFn(const Problem& problem,
+                                               const DistFn& dist_fn) {
   // Create solver.
   MPSolver solver("delivery", MPSolver::GLOP_LINEAR_PROGRAMMING);
   const double inf = solver.infinity();
@@ -40,28 +35,15 @@ Allocator::Alloc Allocator::Allocate(const Problem& problem,
       var_desc.set_order(order);
       for (int warehouse = 0; warehouse < problem.nw(); warehouse++) {
         var_desc.set_warehouse(warehouse);
-        int dx = problem.warehouse(warehouse).location().x() -
-                 problem.order(order).location().x();
-        int dy = problem.warehouse(warehouse).location().y() -
-                 problem.order(order).location().y();
-        double d = ceil(sqrt(dx * dx + dy * dy)) + 1;
-
         for (int product = 0; product < problem.np(); product++) {
           if (problem.order(order).request(product) == 0) continue;
           if (problem.warehouse(warehouse).stock(product) == 0) continue;
           var_desc.set_product(product);
-
-          double coef = 1.0;
-          if (feedback != nullptr &&
-              feedback->count(order) &&
-              feedback->at(order).count(warehouse)) {
-            coef = (*feedback)[order][warehouse];
-          }
-
           const auto& var_hash = SavyProtoHash(var_desc);
           vars[var_hash] = solver.MakeNumVar(
               0, problem.order(order).request(product), var_hash);
-          objective->SetCoefficient(vars[var_hash], 2.0 * d * coef);
+          double coef = dist_fn(order, warehouse, product);
+          objective->SetCoefficient(vars[var_hash], coef);
         }
       }
     }
@@ -174,7 +156,7 @@ Allocator::Alloc Allocator::Allocate(const Problem& problem,
       std::swap(order_perm[o], order_perm[rand_eng() % o]);
     }
     // Return.
-    std::vector<std::pair<int, int>> dist_warehouse;
+    std::vector<std::pair<double, int>> dist_warehouse;
     for (int o : order_perm) {
       for (int p = 0; p < problem.np(); p++) {
         if (order_balance[o][p] >= 0) continue;
@@ -182,11 +164,7 @@ Allocator::Alloc Allocator::Allocate(const Problem& problem,
         for (int w = 0; w < problem.nw(); w++) {
           int giving = res[o][std::make_pair(w, p)];
           if (giving > 0) {
-            int dx = problem.warehouse(w).location().x() -
-                     problem.order(o).location().x();
-            int dy = problem.warehouse(w).location().y() -
-                     problem.order(o).location().y();
-            int d = ceil(sqrt(dx * dx + dy * dy));
+            double d = dist_fn(o, w, p);
             dist_warehouse.push_back({d, w});
           }
         }
@@ -222,7 +200,7 @@ Allocator::Alloc Allocator::Allocate(const Problem& problem,
       std::swap(warehouse_perm[w], warehouse_perm[rand_eng() % w]);
     }
     // Reclaim.
-    std::vector<std::pair<int, int>> dist_order;
+    std::vector<std::pair<double, int>> dist_order;
     for (int w : warehouse_perm) {
       for (int p = 0; p < problem.np(); p++) {
         if (warehouse_balance[w][p] >= 0) continue;
@@ -230,11 +208,7 @@ Allocator::Alloc Allocator::Allocate(const Problem& problem,
         for (int o = 0; o < problem.no(); o++) {
           int giving = res[o][std::make_pair(w, p)];
           if (giving > 0) {
-            int dx = problem.warehouse(w).location().x() -
-                     problem.order(o).location().x();
-            int dy = problem.warehouse(w).location().y() -
-                     problem.order(o).location().y();
-            int d = ceil(sqrt(dx * dx + dy * dy));
+            double d = dist_fn(o, w, p);
             dist_order.push_back({d, o});
           }
         }
@@ -269,19 +243,15 @@ Allocator::Alloc Allocator::Allocate(const Problem& problem,
     }
 
     // Take.
-    auto gt = std::greater<std::pair<int, int>>();
-    std::vector<std::pair<int, int>> dist_warehouse;
+    auto gt = std::greater<std::pair<double, int>>();
+    std::vector<std::pair<double, int>> dist_warehouse;
     for (int o : order_perm) {
       for (int p = 0; p < problem.np(); p++) {
         if (order_balance[o][p] <= 0) continue;
         dist_warehouse.clear();
         for (int w = 0; w < problem.nw(); w++) {
           if (warehouse_balance[w][p] <= 0) continue;
-          int dx = problem.warehouse(w).location().x() -
-                   problem.order(o).location().x();
-          int dy = problem.warehouse(w).location().y() -
-                   problem.order(o).location().y();
-          int d = ceil(sqrt(dx * dx + dy * dy));
+          double d = dist_fn(o, w, p);
           dist_warehouse.push_back({d, w});
         }
         std::make_heap(dist_warehouse.begin(), dist_warehouse.end(), gt);

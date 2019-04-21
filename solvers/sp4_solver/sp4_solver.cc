@@ -17,8 +17,17 @@ std::unique_ptr<Solution> Sp4Solver::Solve() {
   auto solution = std::make_unique<Solution>();
   *solution->mutable_problem() = problem_;
   auto* drone_commands = solution->add_drone_desc();
+  
+  util::Allocator::DistFn dist_fn = [&](int o, int w, int p) {
+    double dx =
+        problem_.warehouse(w).location().x() - problem_.order(o).location().x();
+    double dy =
+        problem_.warehouse(w).location().y() - problem_.order(o).location().y();
+    double d = ceil(sqrt(dx * dx + dy * dy)) + 1;
+    return 2.0 * d;
+  };
 
-  auto alloc = util::Allocator::Allocate(problem_);
+  auto alloc = util::Allocator::AllocateWithDistFn(problem_, dist_fn);
   if (!util::Allocator::VerifyAlloc(problem_, alloc)) {
     LOG(ERROR) << "Invalid alloc!";
     return nullptr;
