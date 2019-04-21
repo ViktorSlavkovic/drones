@@ -55,6 +55,12 @@ function grade {
     local strict_success=$?
     check $success $strict_success "Regular checker exited with $success and strict checker exited  with $strict_success."
     check $score $strict_score "Regular checker gave $score and strict checker gave $strict_score."
+ 
+    local visual_score=-1
+    visual_score=$(visual/visualize_solution --problem_file=$in_path --solution_file=$out_path --just_calc 2>&1 | grep "TOTAL SCORE" | awk '{print $3}')
+    local visual_success=$?
+    check $success $visual_success "Regular checker exited with $success and visualization checker exited  with $visual_success."
+    check $score $visual_score "Regular checker gave $score and visualization checker gave $visual_score."
   fi
   
   check $success 0 "Failed to grade (exit code $success)."
