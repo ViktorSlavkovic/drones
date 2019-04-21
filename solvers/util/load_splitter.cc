@@ -63,10 +63,19 @@ LoadSplitter::RepeatedSplit LoadSplitter::SplitOnce(
     }
   }
 
+  // Make compact.
+  for (auto it = knapsack_taken[total_volume].cbegin();
+       it != knapsack_taken[total_volume].cend();) {
+    if (it->second == 0) {
+      knapsack_taken[total_volume].erase(it++);
+    } else {
+      it++;
+    }
+  }
+
   // Calculate how many times we can do the same.
   int num_times = std::numeric_limits<int>::max();
   for (const auto& pi : knapsack_taken[total_volume]) {
-    if (pi.second == 0) continue;
     int max_times = stock.at(pi.first) / pi.second;
     num_times = std::min(num_times, max_times);
   }

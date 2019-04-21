@@ -23,10 +23,11 @@ class LoadSplitter {
     int total_times;
     std::list<RepeatedSplit> repeated_splits;
   };
-  
+
   // Pack one drone capacity from the given stock. Repeated split is returned
   // in order to export information about how many items are taken per turn and
-  // how many times the same packing can be done.
+  // how many times the same packing can be done. Returned split is compact (
+  // times >= 1 and single_split has only >= 1 map values).
   // Assuming that the stock is "compact" - no products listed which are out of
   // stock.
   static RepeatedSplit SplitOnce(const std::map<int, int>& stock,
@@ -35,7 +36,8 @@ class LoadSplitter {
 
   // Split one (warehouse) stock to multiple drone turns.
   // No assumptions are made about whether the stock is "compact" (see
-  // SplitOnce) or not.
+  // SplitOnce) or not. Returned split is compact (all repeated splits have
+  // times >= 1 all single splits have only >= 1 map values).
   static CompleteSplit Split(std::map<int, int> stock,
                              const std::map<int, int>& volumes,
                              int total_volume);
