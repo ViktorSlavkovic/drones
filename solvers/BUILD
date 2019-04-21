@@ -7,6 +7,7 @@ cc_library(
     linkstatic = True,
     deps = [
         ":problem_solver",
+        "//solvers/cwf_solver",
         "//solvers/ecf_solver",
         "//solvers/lp_solver",
         "//solvers/random_solver",
