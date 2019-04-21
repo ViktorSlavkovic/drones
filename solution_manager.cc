@@ -97,6 +97,10 @@ bool SolutionManager::Simulate(const Solution& solution, int* score) {
   std::vector<Inventory> drone_inventory(problem.nd());
   // Drone's weight next time when it's ready.
   std::vector<int> drone_weight(problem.nd());
+  // Loading schedule: mapped by time moments, the vectors represent all the
+  // LOAD commands finishing at some moment as (warehouse, product, num_items)
+  // triplets.
+  std::map<int, std::vector<std::tuple<int, int, int>>> load_schedule;
   // Unloading schedule: mapped by time moments, the vectors represent all the
   // UNLOAD commands finishing at some moment as (warehouse, product,
   // num_items) triplets.
@@ -151,13 +155,8 @@ bool SolutionManager::Simulate(const Solution& solution, int* score) {
           break;
         }
         case DroneCommand_CommandType_LOAD: {
-          if (warehouse_inventory[cmd.warehouse()].GetProductState(
-                  cmd.product()) < cmd.num_items()) {
-            LOG(ERROR) << "Not enough items in the warehouse.";
-            return false;
-          }
-          warehouse_inventory[cmd.warehouse()].Update(cmd.product(),
-                                                      -cmd.num_items());
+          load_schedule[drone_busy_until[cmd.drone()]].push_back(
+              std::make_tuple(cmd.warehouse(), cmd.product(), cmd.num_items()));
           drone_inventory[cmd.drone()].Update(cmd.product(), cmd.num_items());
           drone_weight[cmd.drone()] +=
               cmd.num_items() * problem.product(cmd.product()).m();
@@ -165,6 +164,9 @@ bool SolutionManager::Simulate(const Solution& solution, int* score) {
             LOG(ERROR) << "Drone capacity exceeded.";
             return false;
           }
+          // Make sure there's an entry in the timeline, even an empty one, in
+          // order to ensure the loading will be handled.
+          timeline[drone_busy_until[cmd.drone()]];
           drone_loc[cmd.drone()] =
               problem.warehouse(cmd.warehouse()).location();
           break;
@@ -208,7 +210,17 @@ bool SolutionManager::Simulate(const Solution& solution, int* score) {
       }
     }
 
-    // Do unloading and delivery.
+    // Do loading, unloading and delivery.
+    for (const auto& x : load_schedule[moment.first]) {
+      if (warehouse_inventory[std::get<0>(x)].GetProductState(std::get<1>(x)) <
+          std::get<2>(x)) {
+        LOG(ERROR) << "Not enough items in the warehouse.";
+        return false;
+      }
+      warehouse_inventory[std::get<0>(x)].Update(std::get<1>(x),
+                                                 -std::get<2>(x));
+    }
+
     for (const auto& x : unload_schedule[moment.first]) {
       warehouse_inventory[std::get<0>(x)].Update(std::get<1>(x),
                                                  std::get<2>(x));

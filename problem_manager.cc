@@ -196,13 +196,14 @@ bool ProblemManager::SaveToProblemFile(const Problem &problem,
                         })
        << std::endl;
   fout << problem.nw() << std::endl;
-  fout << absl::StrJoin(
-      problem.warehouse(), "\n",
-      [](std::string *out, const Warehouse &warehouse) {
-        out->append(absl::Substitute("$0 $1\n$2\n", warehouse.location().x(),
-                                     warehouse.location().y(),
-                                     absl::StrJoin(warehouse.stock(), " ")));
-      });
+  fout << absl::StrJoin(problem.warehouse(), "\n",
+                        [](std::string *out, const Warehouse &warehouse) {
+                          out->append(absl::Substitute(
+                              "$0 $1\n$2", warehouse.location().x(),
+                              warehouse.location().y(),
+                              absl::StrJoin(warehouse.stock(), " ")));
+                        })
+       << std::endl;
   fout << problem.no() << std::endl;
   for (const auto &order : problem.order()) {
     int num_items =

@@ -35,6 +35,7 @@ struct DroneCommand {
 vector<queue<DroneCommand>> drone_commands;
 
 multimap<int, int> drone_schedule;                      // t -> d
+multimap<int, tuple<int, int, int>> load_schedule;      // t -> (w, p, n)
 multimap<int, tuple<int, int, int>> unload_schedule;    // t -> (w, p, n)
 multimap<int, tuple<int, int, int>> delivery_schedule;  // t -> (o, p, n)
 
@@ -217,6 +218,7 @@ void LoadSolution(const string& path) {
 int next_relevant_moment() {
   int res = numeric_limits<int>::max();
   if (!drone_schedule.empty()) res = min(res, drone_schedule.begin()->first);
+  if (!load_schedule.empty()) res = min(res, load_schedule.begin()->first);
   if (!unload_schedule.empty()) res = min(res, unload_schedule.begin()->first);
   if (!delivery_schedule.empty())
     res = min(res, delivery_schedule.begin()->first);
@@ -274,12 +276,11 @@ void Simulate() {
           int w = cmd.spec.L.w;
           int p = cmd.spec.L.p;
           int n = cmd.spec.L.n;
-          assert(warehouse_stock[w][p] >= n);
-          warehouse_stock[w][p] -= n;
           assert(M - drone_weight[d] >= n * product_weight[p]);
           drone_weight[d] += n * product_weight[p];
           drone_inventory[d][p] += n;
           drone_loc[d] = warehouse_loc[w];
+          load_schedule.insert({finish_time, {w, p, n}});
           break;
         }
         case 'U': {
@@ -290,8 +291,8 @@ void Simulate() {
           drone_weight[d] -= n * product_weight[p];
           assert(drone_inventory[d][p] >= n);
           drone_inventory[d][p] -= n;
-          unload_schedule.insert({finish_time, {w, p, n}});
           drone_loc[d] = warehouse_loc[w];
+          unload_schedule.insert({finish_time, {w, p, n}});
           break;
         }
         case 'D': {
@@ -302,8 +303,8 @@ void Simulate() {
           drone_weight[d] -= n * product_weight[p];
           assert(drone_inventory[d][p] >= n);
           drone_inventory[d][p] -= n;
-          delivery_schedule.insert({finish_time, {o, p, n}});
           drone_loc[d] = order_loc[o];
+          delivery_schedule.insert({finish_time, {o, p, n}});
           break;
         }
         case 'W': {
@@ -313,7 +314,18 @@ void Simulate() {
     }
     drone_schedule.erase(t);
 
-    // (2) Handle unload.
+    // (2) Handle load.
+    for (const auto& event : load_schedule) {
+      if (event.first != t) break;
+      int w = get<0>(event.second);
+      int p = get<1>(event.second);
+      int n = get<2>(event.second);
+      assert(warehouse_stock[w][p] >= n);
+      warehouse_stock[w][p] -= n;
+    }
+    load_schedule.erase(t);
+
+    // (3) Handle unload.
     for (const auto& event : unload_schedule) {
       if (event.first != t) break;
       int w = get<0>(event.second);
@@ -323,7 +335,7 @@ void Simulate() {
     }
     unload_schedule.erase(t);
 
-    // (3) Handle delivery.
+    // (4) Handle delivery.
     for (const auto& event : delivery_schedule) {
       if (event.first != t) break;
       int o = get<0>(event.second);

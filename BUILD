@@ -30,6 +30,7 @@ sh_library(
     data = [
         ":main",
         "//checker:main",
+        "//visual:visualize_solution",
     ],
 )
 

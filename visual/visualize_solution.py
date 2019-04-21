@@ -85,6 +85,7 @@ class Simulation:
     def __init__(self, problem_solution: ProblemSolution):
         self.problem_solution = problem_solution
         self._drone_schedule = set()
+        self._load_schedule = set()
         self._unload_schedule = set()
         self._delivery_schedule = set()
         self.warehouse_empty = [False for _ in range(problem_solution.nw)]
@@ -136,8 +137,7 @@ class Simulation:
                 p = cmd['product']
                 n = cmd['num_items']
                 if cmd['type'] == 'L':
-                    ps.warehouse_stock[w][p] -= n
-                    self.warehouse_empty[w] = (sum(ps.warehouse_stock[w]) == 0)
+                    self._load_schedule.add((finish_time, w, p, n, d))
                 else:
                     self._unload_schedule.add((finish_time, w, p, n, d))
                 travel_time = cmd_duration - 1
@@ -167,7 +167,20 @@ class Simulation:
         self._drone_schedule.difference_update(drone_schedule_remove)
         self._drone_schedule.update(drone_schedule_add)
 
-        # (2) Handle unload.
+        # (2) Handle load.
+        load_schedule_remove = set()
+        for event in self._load_schedule:
+            if not event[0] == tick: continue
+            load_schedule_remove.add(event)
+            w = event[1]
+            p = event[2]
+            n = event[3]
+            ps.warehouse_stock[w][p] -= n
+            self.warehouse_empty[w] = (sum(ps.warehouse_stock[w]) == 0)
+
+        self._load_schedule.difference_update(load_schedule_remove)
+
+        # (3) Handle unload.
         unload_schedule_remove = set()
         for event in self._unload_schedule:
             if not event[0] == tick: continue
@@ -176,11 +189,11 @@ class Simulation:
             p = event[2]
             n = event[3]
             ps.warehouse_stock[w][p] += n
-            ps.warehouse_empty[w] = (sum(ps.warehouse_stock[w] == 0))
+            self.warehouse_empty[w] = (sum(ps.warehouse_stock[w]) == 0)
 
         self._unload_schedule.difference_update(unload_schedule_remove)
 
-        # (3) Handle delivery.
+        # (4) Handle delivery.
         delivery_schedule_remove = set()
         for event in self._delivery_schedule:
             if not event[0] == tick: continue
@@ -281,7 +294,7 @@ def main(argv):
                       extra_args=['-vcodec', 'libx264'])
 
     if sim.last_tick >= 0:
-        logging.info(f'TOTAL POINTS = {int(sim.total_points)}')
+        print(f'TOTAL SCORE: {int(sim.total_points)}')
 
 
 if __name__ == "__main__":
