@@ -14,7 +14,6 @@
 #include "glog/logging.h"
 #include "solvers/util/allocator.h"
 #include "solvers/util/load_splitter.h"
-#include "solvers/util/lp_util.h"
 
 DEFINE_int32(ecf_split_iter, 10,
              "Number of split iterations, 1 is essential an it's without a "
@@ -52,7 +51,7 @@ EcfSolver::OrderSplits EcfSolver::IterativeSplit(int num_iter) const {
       auto calc_and_add_split = [&]() {
         if (from_curr_w.empty()) return;
         CHECK(prev_w >= 0);
-        CHECK(prev_w < problem_.no());
+        CHECK(prev_w < problem_.nw());
         auto split = util::LoadSplitter::Split(from_curr_w, product_weights,
                                                problem_.m());
         res[o][prev_w] = split;
@@ -188,6 +187,8 @@ std::unique_ptr<Solution> EcfSolver::PackSolution(
     // roll-back the commands in case of an unsuccessfull matching, so that an
     // another order can be given a chance.
     std::vector<int> num_drone_commands(problem_.nd(), 0);
+    auto backup_drone_busy_until = drone_busy_until;
+    auto backup_drone_location = drone_location;
 
     auto calc_total_pending_items = [&]() {
       int res = 0;
@@ -208,6 +209,23 @@ std::unique_ptr<Solution> EcfSolver::PackSolution(
     total_pending_items++;
     // This is to calculate the order's score.
     int max_drone_busy_until = -1;
+
+    auto roll_back = [&]() {
+      LOG_IF(INFO, enable_log) << "    Rolling back.";
+      for (int d = 0; d < problem_.nd(); d++) {
+        while (num_drone_commands[d]--) {
+          solution->mutable_drone_desc(d)
+              ->mutable_drone_command()
+              ->RemoveLast();
+        }
+      }
+      drone_location = backup_drone_location;
+      drone_busy_until = backup_drone_busy_until;
+      max_drone_busy_until = problem_.t() + 1;  // this will give 0 points.
+    };
+
+    bool should_roll_back = false;
+
     while (!order_splits[o].empty()) {
       int curr_total_pending_items = calc_total_pending_items();
       CHECK(0 < curr_total_pending_items &&
@@ -257,22 +275,11 @@ std::unique_ptr<Solution> EcfSolver::PackSolution(
       if (!match_found) {
         // Roll-back.
         LOG_IF(INFO, enable_log) << "    No match found.";
-      roll_back:
-        LOG_IF(INFO, enable_log) << "    Rolling back.";
-        for (int d = 0; d < problem_.nd(); d++) {
-          while (num_drone_commands[d]--) {
-            solution->mutable_drone_desc(d)
-                ->mutable_drone_command()
-                ->RemoveLast();
-          }
-        }
-        max_drone_busy_until = problem_.t() + 1;  // this will give 0 points.
+        should_roll_back = true;
         break;
       }
 
       auto load = order_splits[o][best_w].repeated_splits.front().single_split;
-
-      int curr_drone_busy_until = drone_busy_until[best_d];
 
       // Let's generate the LOAD commands.
       {
@@ -290,15 +297,18 @@ std::unique_ptr<Solution> EcfSolver::PackSolution(
           cmd->set_warehouse(best_w);
           cmd->set_product(pi.first);
           cmd->set_num_items(pi.second);
-          cmd->set_start_time(curr_drone_busy_until + 1);
-          curr_drone_busy_until += dist + 1;
-          if (curr_drone_busy_until > problem_.t()) {
+          cmd->set_start_time(drone_busy_until[best_d] + 1);
+          drone_busy_until[best_d] += dist + 1;
+          if (drone_busy_until[best_d] > problem_.t()) {
             LOG(INFO) << "    Exceeded!";
-            goto roll_back;
+            should_roll_back = true;
+            break;
           }
           dist = 0;
         }
       }
+
+      if (should_roll_back) break;
 
       // Let's generate the DELIVER commands.
       {
@@ -316,22 +326,26 @@ std::unique_ptr<Solution> EcfSolver::PackSolution(
           cmd->set_order(o);
           cmd->set_product(pi.first);
           cmd->set_num_items(pi.second);
-          cmd->set_start_time(curr_drone_busy_until + 1);
-          curr_drone_busy_until += dist + 1;
+          cmd->set_start_time(drone_busy_until[best_d] + 1);
+          drone_busy_until[best_d] += dist + 1;
           max_drone_busy_until =
-              std::max(curr_drone_busy_until, max_drone_busy_until);
-          if (curr_drone_busy_until > problem_.t()) {
+              std::max(drone_busy_until[best_d], max_drone_busy_until);
+          if (drone_busy_until[best_d] > problem_.t()) {
             LOG(INFO) << "    Exceeded!";
-            goto roll_back;
+            should_roll_back = true;
+            break;
           }
           dist = 0;
         }
       }
 
-      // If we're definitely doing all this (not rolling back), update drone
-      // info and pending_warehouses.
+      if (should_roll_back) break;
+
+      // We haven't rolled-back yet, which doesn't mean we won't roll-back later
+      // in this order. Still, we have some backed-up/irrelevant updates to do.
       drone_location[best_d] = problem_.order(o).location();
-      drone_busy_until[best_d] = curr_drone_busy_until;
+      // We don't care if order_splits[o] is dirty if we roll back later in
+      // this order, since we're going to the next order.
       order_splits[o][best_w].total_times--;
       order_splits[o][best_w].total_num_items -=
           order_splits[o][best_w].repeated_splits.front().num_items;
@@ -344,6 +358,12 @@ std::unique_ptr<Solution> EcfSolver::PackSolution(
         }
       }
     }
+
+    if (should_roll_back) {
+      roll_back();
+      continue;
+    }
+
     res_score +=
         ceil(100.0 * (problem_.t() - max_drone_busy_until + 1) / problem_.t());
   }
