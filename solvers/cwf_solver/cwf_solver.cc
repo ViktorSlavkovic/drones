@@ -18,9 +18,16 @@
 
 namespace drones {
 
-std::unique_ptr<Solution> CwfSolver::Solve() {
-  // Closest warehouses.
-  std::vector<int> closest_w(problem_.no());
+CwfSolver::CwfSolver(const Problem& problem)
+    : ProblemSolver(problem), closest_w_(problem.no()), product_weights_() {
+  CalcClosestWarehouses();
+  for (int p = 0; p < problem_.np(); p++) {
+    product_weights_[p] = problem_.product(p).m();
+  }
+}
+
+void CwfSolver::CalcClosestWarehouses() {
+  CHECK(closest_w_.size() == problem_.no());
   for (int o = 0; o < problem_.no(); o++) {
     int best_w = -1;
     double min_dist = std::numeric_limits<double>::max();
@@ -36,9 +43,108 @@ std::unique_ptr<Solution> CwfSolver::Solve() {
       }
     }
     CHECK(best_w >= 0);
-    closest_w[o] = best_w;
+    closest_w_[o] = best_w;
+  }
+}
+
+double CwfSolver::EstimateOrderDuration(const util::Allocator::Alloc& alloc,
+                                        int o) const {
+  int ox = problem_.order(o).location().x();
+  int oy = problem_.order(o).location().y();
+  int cwx = problem_.warehouse(closest_w_[o]).location().x();
+  int cwy = problem_.warehouse(closest_w_[o]).location().y();
+
+  // Let's make things easier.
+  // [w][p] -> num items
+  std::map<int, std::map<int, int>> wpn;
+  for (const auto& wp_i : alloc[o]) {
+    CHECK(wp_i.second > 0);
+    wpn[wp_i.first.first][wp_i.first.second] = wp_i.second;
   }
 
+  // Make the splits.
+  std::map<int, util::LoadSplitter::CompleteSplit> warehouse_splits;
+  for (const auto& w_pn : wpn) {
+    warehouse_splits[w_pn.first] =
+        util::LoadSplitter::Split(w_pn.second, product_weights_, problem_.m());
+  }
+
+  std::map<int, int> from_closest = wpn[closest_w_[o]];
+
+  double completion_time = 0;
+
+  // For each warehouse, carry stuff to the nearest warehouse if it's closer,
+  // otherwise, carry directly to the customer.
+  for (const auto& w_split : warehouse_splits) {
+    int w = w_split.first;
+    if (w == closest_w_[o]) continue;
+
+    double dox = ox - problem_.warehouse(w).location().x();
+    double doy = oy - problem_.warehouse(w).location().y();
+    double dcwx = cwx - problem_.warehouse(w).location().x();
+    double dcwy = cwy - problem_.warehouse(w).location().y();
+    int dist_o = ceil(sqrt(dox * dox + doy * doy));
+    int dist_cw = ceil(sqrt(dcwx * dcwx + dcwy * dcwy));
+
+    if (dist_o < dist_cw) {
+      for (const auto& rsplit : w_split.second.repeated_splits) {
+        // Unloads will take times * dist * num_products in single split, and
+        // loads depend on where the drones are coming from, which can be
+        // anywhere.
+        // TODO(viktors): For now we'll approximate anywhere with order location
+        // (rationale here is going back multiple times, but there are many
+        // drones which can come from anywhere really. Consider using mean of
+        // all locations for first load and order location for all the rest.
+        // This is probably not very important.
+        completion_time +=
+            2.0 * rsplit.times * (dist_o + rsplit.single_split.size());
+      }
+    } else {
+      for (const auto& rsplit : w_split.second.repeated_splits) {
+        // Unloads will take times * dist * num_products in single split, and
+        // loads depend on where the drones are coming from, which can be
+        // anywhere.
+        // TODO(viktors): Same as above, we'll use the closest warehouse as src
+        // in LOADs.
+        completion_time +=
+            2.0 * rsplit.times * (dist_cw + rsplit.single_split.size());
+        for (const auto& pi : rsplit.single_split) {
+          from_closest[pi.first] += pi.second * rsplit.times;
+        }
+      }
+    }
+  }
+
+  // Carry stuff from the closest warehouse to the order destination.
+  {
+    auto split =
+        util::LoadSplitter::Split(from_closest, product_weights_, problem_.m());
+    double dx = ox - cwx;
+    double dy = oy - cwy;
+    int dist = ceil(sqrt(dx * dx + dy * dy));
+    for (const auto& rsplit : split.repeated_splits) {
+      // TODO(viktors): Approx as above.
+      completion_time +=
+          2.0 * rsplit.times * (dist + rsplit.single_split.size());
+    }
+  }
+  return completion_time;
+}
+
+std::vector<int> CwfSolver::GenerateOrderPermutation(const util::Allocator::Alloc& alloc) const {
+  std::vector<std::pair<double, int>> order_durations;
+  for (int o = 0; o < problem_.no(); o++) {
+    order_durations.push_back({EstimateOrderDuration(alloc, o), o});
+  }
+  std::sort(order_durations.begin(), order_durations.end());
+  std::vector<int> res;
+  for (const auto& dur_ord : order_durations) {
+    res.push_back(dur_ord.second);
+  }
+  return res; 
+}
+
+std::unique_ptr<Solution> CwfSolver::Solve() {
   // Allocate.
   util::Allocator::DistFn dist_fn = [&](int o, int w, int p) {
     double dx_o =
@@ -47,9 +153,9 @@ std::unique_ptr<Solution> CwfSolver::Solve() {
         problem_.warehouse(w).location().y() - problem_.order(o).location().y();
     double d_o = ceil(sqrt(dx_o * dx_o + dy_o * dy_o)) + 1;
     double dx_w = problem_.warehouse(w).location().x() -
-                  problem_.warehouse(closest_w.at(o)).location().x();
+                  problem_.warehouse(closest_w_.at(o)).location().x();
     double dy_w = problem_.warehouse(w).location().y() -
-                  problem_.warehouse(closest_w.at(o)).location().y();
+                  problem_.warehouse(closest_w_.at(o)).location().y();
     double d_w = ceil(sqrt(dx_w * dx_w + dy_w * dy_w)) + 1;
     double d = std::min(d_o, d_w);
     return 2.0 * d;
@@ -57,68 +163,9 @@ std::unique_ptr<Solution> CwfSolver::Solve() {
   auto alloc = util::Allocator::AllocateWithDistFn(problem_, dist_fn);
   CHECK(util::Allocator::VerifyAlloc(problem_, alloc)) << "Invalid alloc!";
   LOG(INFO) << "Successfully allocated.";
-  
-  // Needed for LoadSplitter::Split.
-  std::map<int, int> product_weights;
-  for (int p = 0; p < problem_.np(); p++) {
-    product_weights[p] = problem_.product(p).m();
-  }
-  
+
   // Oder permutation.
-  std::vector<int> order_perm;
-  {
-    std::vector<std::pair<int, int>> order_durations;
-
-    for (int o = 0; o < problem_.no(); o++) {
-      int ox = problem_.order(o).location().x();
-      int oy = problem_.order(o).location().y();
-
-      // Number of warehouses used for this order.
-      int total_wh = 0;
-      double mwx = 0.0;
-      double mwy = 0.0;
-      for (int w = 0; w < problem_.nw(); w++) {
-        for (int p = 0; p < problem_.np(); p++) {
-          if (alloc[o].count({w, p})) {
-            mwx += problem_.warehouse(w).location().x();
-            mwy += problem_.warehouse(w).location().y();
-            total_wh++;
-            break;
-          }
-        }
-      }
-      mwx /= total_wh;
-      mwy /= total_wh;
-
-      int completion_time = 0;
-
-      int num_items = 0;
-      for (const auto& wp_items : alloc[o]) {
-        int w = wp_items.first.first;
-        int n = wp_items.second;
-        CHECK(n > 0);
-
-        num_items += n;
-
-        if (w == closest_w[o]) continue;
-
-        double wx = problem_.warehouse(closest_w[o]).location().x();
-        double wy = problem_.warehouse(closest_w[o]).location().y();
-        double dx = mwx - wx;
-        double dy = mwy - wy;
-        completion_time += n * 2 * (ceil(sqrt(dx * dx + dy * dy)) + 1);
-      }
-
-      double dx = ox - problem_.warehouse(closest_w[o]).location().x();
-      double dy = oy - problem_.warehouse(closest_w[o]).location().y();
-      completion_time += num_items * 2 * (ceil(sqrt(dx * dx + dy * dy)) + 1);
-      order_durations.push_back({completion_time, o});
-    }
-    std::sort(order_durations.begin(), order_durations.end());
-    for (const auto& dur_ord : order_durations) {
-      order_perm.push_back(dur_ord.second);
-    }
-  }
+  std::vector<int> order_perm = GenerateOrderPermutation(alloc);
 
   // Init solution.
   auto solution = std::make_unique<Solution>();
@@ -127,22 +174,14 @@ std::unique_ptr<Solution> CwfSolver::Solve() {
     solution->add_drone_desc();
   }
 
-  // Warehouse surpluses.
-  std::vector<std::map<int, int>> surplus(problem_.nw());
-  for (int w = 0; w < problem_.nw(); w++) {
-    for (int p = 0; p < problem_.np(); p++) {
-      if (problem_.warehouse(w).stock(p) > 0) {
-        surplus[w][p]++;
-      }
-    }
-  }
+////////////////////////////////////////////////////////////////////////////////
 
   // What is needed for the current order.
   std::map<int, int> needed;
 
-  // Which warehouses have what left to deliver to the current oder's closest
-  // warehouse.
-  std::map<int, std::map<int, int>> pending_warehouses;
+  // Pending load (as a CompleteSplit) for each warehouses. This load has to be
+  // taken either to warehouse closest_w[o] or to order o directly. 
+  std::map<int, util::LoadSplitter::CompleteSplit> pending_load;
 
   // Drones book-keeping.
   std::vector<int> drone_busy_until(problem_.nd(), 0);
@@ -151,8 +190,10 @@ std::unique_ptr<Solution> CwfSolver::Solve() {
 
   // Handle orders one by one.
   for (int o : order_perm) {
-    const double cwx = problem_.warehouse(closest_w[o]).location().x();
-    const double cwy = problem_.warehouse(closest_w[o]).location().y();
+    int ox = problem_.order(o).location().x();
+    int oy = problem_.order(o).location().y();
+    int cwx = problem_.warehouse(closest_w_[o]).location().x();
+    int cwy = problem_.warehouse(closest_w_[o]).location().y();
 
     // Set needed.
     needed.clear();
@@ -162,14 +203,34 @@ std::unique_ptr<Solution> CwfSolver::Solve() {
       }
     }
 
-    // Set pending_warehouses.
-    pending_warehouses.clear();
-    for (const auto& wp_i : alloc[o]) {
-      if (wp_i.first.first == closest_w[o]) continue;
-      CHECK(wp_i.second > 0);
-      pending_warehouses[wp_i.first.first][wp_i.first.second] = wp_i.second;
+    // Set pending_loads.
+    pending_load.clear();
+    {
+      std::map<int, std::map<int, int>> aggregate;
+      for (const auto& wp_i : alloc[o]) {
+        if (wp_i.first.first == closest_w_[o]) continue;
+        CHECK(wp_i.second > 0);
+        aggregate[wp_i.first.first][wp_i.first.second] = wp_i.second;
+      }
+      for (const auto& w_stock : aggregate) {
+        pending_load[w_stock.first] = util::LoadSplitter::Split(
+            w_stock.second, product_weights_, problem_.m()); 
+      }
     }
 
+    // Unloads of each product in the closest_w[o].
+    // [p][t] -> set of numbers of items of product p unloaded at t
+    std::vector<std::multimap<int, int>> product_unloads(problem_.np());
+    // Waiting line for each product in closest_w[o].
+    // [p] -> {last not completely taken unload, what's left}
+    std::vector<std::pair<int, int>> wait_line(problem_.np(), {-1, 0});
+    for (const auto& wp_i : alloc[o]) {
+      if (wp_i.first.first == closest_w_[o]) {
+        product_unloads[wp_i.first.second].insert({-1, wp_i.second});
+        wait_line[wp_i.first.second] = {-1, wp_i.second};
+      }
+    }
+    
     // Number of commands executed by each drone for this order. Used to
     // roll-back the commands in case of an unsuccessfull matching, so that an
     // another order can be given a chance.
@@ -190,29 +251,18 @@ std::unique_ptr<Solution> CwfSolver::Solve() {
       drone_busy_until = backup_drone_busy_until;
     };
 
-    // Unloads of each product in the closest_w[o].
-    // [p][t] -> set of numbers of items of product p unloaded at t
-    std::vector<std::multimap<int, int>> product_unloads(problem_.np());
-    // Waiting line for each product in closest_w[o].
-    // [p] -> {last not completely taken unload, what's left}
-    std::vector<std::pair<int, int>> wait_line(problem_.np(), {-1, 0});
-    for (const auto& wp_i : alloc[o]) {
-      if (wp_i.first.first == closest_w[o]) {
-        product_unloads[wp_i.first.second].insert({-1, wp_i.second});
-        wait_line[wp_i.first.second] = {-1, wp_i.second};
-      }
-    }
-
     // This is just bringing all the items to the closest warehouse.
     bool brought_all = true;
-    while (!pending_warehouses.empty()) {
+    while (!pending_load.empty()) {
       // Find the best (w, d) match.
       int best_w = -1;
       int best_d = -1;
       int best_t = std::numeric_limits<int>::max();  // Earliest.
+      bool best_unload = true;
       bool match_found = false;
-      for (const auto& w_stock : pending_warehouses) {
-        int w = w_stock.first;
+      for (const auto& w_split: pending_load) {
+        int w = w_split.first;
+        const auto& rsplit = w_split.second.repeated_splits.front();
         for (int d = 0; d < problem_.nd(); d++) {
           int t = drone_busy_until[d];
           // LOAD dutation = dist to warehouse + 1
@@ -222,14 +272,24 @@ std::unique_ptr<Solution> CwfSolver::Solve() {
             double dy =
                 drone_location[d].y() - problem_.warehouse(w).location().y();
             int dist = ceil(sqrt(dx * dx + dy * dy));
-            t += dist + 1;
+            t += dist + rsplit.single_split.size();
           }
-          // UNLOAD duration = dist warehouse->closest warehouse + 1
+          // UNLOAD vs LOAD duration...
+          bool unload = false;
           {
-            double dx = problem_.warehouse(w).location().x() - cwx;
-            double dy = problem_.warehouse(w).location().y() - cwy;
-            int dist = ceil(sqrt(dx * dx + dy * dy));
-            t += dist + 1;
+            double dox = ox - problem_.warehouse(w).location().x();
+            double doy = oy - problem_.warehouse(w).location().y();
+            double dcwx = cwx - problem_.warehouse(w).location().x();
+            double dcwy = cwy - problem_.warehouse(w).location().y();
+            int dist_o = ceil(sqrt(dox * dox + doy * doy));
+            int dist_cw = ceil(sqrt(dcwx * dcwx + dcwy * dcwy));
+            if (dist_o < dist_cw) {
+              t += dist_o + rsplit.single_split.size();
+              unload = false;
+            } else {
+              t += dist_cw + rsplit.single_split.size();
+              unload = true;
+            }
           }
           // First compare by completion time, then by start time.
           // Sure, this duration approximation is considering only one product,
@@ -241,6 +301,7 @@ std::unique_ptr<Solution> CwfSolver::Solve() {
             best_d = d;
             best_w = w;
             best_t = t;
+            best_unload = unload;
             match_found = true;
           }
         }
@@ -252,9 +313,7 @@ std::unique_ptr<Solution> CwfSolver::Solve() {
       }
 
       // Great, we have the match, let's see what we're taking.
-      auto taking = util::LoadSplitter::SplitOnce(pending_warehouses[best_w],
-                                                  product_weights, problem_.m())
-                        .single_split;
+      auto taking = pending_load[best_w].repeated_splits.front().single_split;
 
       // Let's generate the LOAD commands.
       {
@@ -285,8 +344,8 @@ std::unique_ptr<Solution> CwfSolver::Solve() {
 
       if (!brought_all) break;
 
-      // Let's generate the UNLOAD commands.
-      {
+      // Let's generate the UNLOAD/LOAD commands.
+      if (best_unload) {
         double dx = cwx - problem_.warehouse(best_w).location().x();
         double dy = cwy - problem_.warehouse(best_w).location().y();
         int dist = ceil(sqrt(dx * dx + dy * dy));
@@ -296,11 +355,12 @@ std::unique_ptr<Solution> CwfSolver::Solve() {
           auto* cmd = solution->mutable_drone_desc(best_d)->add_drone_command();
           cmd->set_drone(best_d);
           cmd->set_type(DroneCommand_CommandType_UNLOAD);
-          cmd->set_warehouse(closest_w[o]);
+          cmd->set_warehouse(closest_w_[o]);
           cmd->set_product(pi.first);
           cmd->set_num_items(pi.second);
           cmd->set_start_time(drone_busy_until[best_d] + 1);
           drone_busy_until[best_d] += dist + 1;
+          drone_location[best_d] = problem_.warehouse(closest_w_[o]).location();
           product_unloads[pi.first].insert(
               {drone_busy_until[best_d], pi.second});
           if (drone_busy_until[best_d] > problem_.t()) {
@@ -310,21 +370,46 @@ std::unique_ptr<Solution> CwfSolver::Solve() {
           }
           dist = 0;
         }
+      } else {
+        double dx = ox - problem_.warehouse(best_w).location().x();
+        double dy = oy - problem_.warehouse(best_w).location().y();
+        int dist = ceil(sqrt(dx * dx + dy * dy));
+        for (const auto& pi : taking) {
+          if (pi.second < 1) continue;
+          num_drone_commands[best_d]++;
+          auto* cmd = solution->mutable_drone_desc(best_d)->add_drone_command();
+          cmd->set_drone(best_d);
+          cmd->set_type(DroneCommand_CommandType_DELIVER);
+          cmd->set_order(o);
+          cmd->set_product(pi.first);
+          cmd->set_num_items(pi.second);
+          cmd->set_start_time(drone_busy_until[best_d] + 1);
+          drone_busy_until[best_d] += dist + 1;
+          drone_location[best_d] = problem_.order(o).location();
+          needed[pi.first] -= pi.second;
+          if (drone_busy_until[best_d] > problem_.t()) {
+            LOG(INFO) << "    Exceeded!";
+            brought_all = false;
+            break;
+          }
+          dist = 0;
+        } 
       }
 
       if (!brought_all) break;
 
       // We haven't rolled-back yet, which doesn't mean we won't roll-back later
       // in this order. Still, we have some backed-up/irrelevant updates to do.
-      drone_location[best_d] = problem_.warehouse(closest_w[o]).location();
-      // Remove taken from pending_warehouses.
-      for (const auto& pi : taking) {
-        if ((pending_warehouses[best_w][pi.first] -= pi.second) == 0) {
-          pending_warehouses[best_w].erase(pi.first);
-          if (pending_warehouses[best_w].empty()) {
-            pending_warehouses.erase(best_w);
-          }
-        }
+      //
+      // Remove taken from pending_load.
+      auto& rsplit = pending_load[best_w].repeated_splits.front();
+      pending_load[best_w].total_num_items -= rsplit.num_items;
+      if (--rsplit.times == 0) {
+        // Warning: rsplit doesn't exist anymore!
+        pending_load[best_w].repeated_splits.pop_front();
+      }
+      if (--pending_load[best_w].total_times == 0) {
+        pending_load.erase(best_w);
       }
     }
 
@@ -338,7 +423,7 @@ std::unique_ptr<Solution> CwfSolver::Solve() {
     // At this point, we have it all in the closest warehouse, so let's deliver
     // it all.
     auto order_split =
-        util::LoadSplitter::Split(needed, product_weights, problem_.m());
+        util::LoadSplitter::Split(needed, product_weights_, problem_.m());
     bool success = true;
     while (order_split.total_times > 0) {
       auto& curr_split = order_split.repeated_splits.front();
@@ -422,7 +507,7 @@ std::unique_ptr<Solution> CwfSolver::Solve() {
           auto* cmd = solution->mutable_drone_desc(best_d)->add_drone_command();
           cmd->set_drone(best_d);
           cmd->set_type(DroneCommand_CommandType_LOAD);
-          cmd->set_warehouse(closest_w[o]);
+          cmd->set_warehouse(closest_w_[o]);
           cmd->set_product(pi.first);
           cmd->set_num_items(pi.second);
           cmd->set_start_time(drone_busy_until[best_d] + 1);
