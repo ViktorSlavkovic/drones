@@ -44,6 +44,7 @@ cc_binary(
         ":solution_cc_proto",
         ":solution_manager",
         "//solvers:problem_solver_factory",
+        "//solvers/upper_bound",
         "@com_github_gflags_gflags//:gflags",
         "@com_github_glog_glog//:glog",
         "@com_google_absl//absl/strings",

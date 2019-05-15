@@ -7,6 +7,7 @@
 #include "solution.pb.h"
 #include "solution_manager.h"
 #include "solvers/problem_solver_factory.h"
+#include "solvers/upper_bound/upper_bound.h"
 
 #include <iostream>
 #include <memory>
@@ -39,9 +40,8 @@ DEFINE_bool(
 DEFINE_string(
     gen_problem_type, "{}",
     "Type of the problem being generated (ProblemType proto) as a text proto.");
-DEFINE_string(
-    solver_type, "random",
-    "The solver type (see ProblemSolverFactory).");
+DEFINE_string(solver_type, "random",
+              "The solver type (see ProblemSolverFactory).");
 DEFINE_bool(
     check, true,
     "If true, the solution will be checked - simulated, validated and scored.");
@@ -82,8 +82,9 @@ int main(int argc, char* argv[]) {
     T  = $4
     ProblemType: $5
   )",
-      problem->nd(), problem->np(), problem->nw(), problem->no(), problem->t(),
-      problem->problem_type().DebugString());
+                                problem->nd(), problem->np(), problem->nw(),
+                                problem->no(), problem->t(),
+                                problem->problem_type().DebugString());
 
   if (FLAGS_gen_problem) {
     if (FLAGS_write_gen_problem) {
@@ -104,6 +105,11 @@ int main(int argc, char* argv[]) {
     CHECK(drones::SolutionManager::Simulate(*solution, &score))
         << "Invalid solution!";
     std::cout << "TOTAL SCORE: " << score << std::endl;
+    LOG(INFO) << "Calculating the upper bound estimate...";
+    int upper_bound = drones::UpperBound(*problem).Calc();
+    LOG(INFO) << absl::Substitute(
+        "\nTotal Score: $0\nUpper Bound: $1\nQuality: $2 %", score, upper_bound,
+        100.0 * score / upper_bound);
   }
 
   if (!FLAGS_read_solution && !FLAGS_solution_file.empty()) {
