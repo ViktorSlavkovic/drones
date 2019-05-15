@@ -255,6 +255,14 @@ void CwfSolver::IterativeAlloc(int num_iter) {
   LOG(INFO) << "Successfully allocated.";
 }
 
+static std::map<int, int> single_split_sizes;
+static void log_single_split_size(int sz) { single_split_sizes[sz]++; }
+static void print_single_split_sizes() {
+  LOG(INFO) << absl::Substitute(
+      "single_split_sizes: \n $0",
+      absl::StrJoin(single_split_sizes, ",", absl::PairFormatter(":")));
+}
+
 std::unique_ptr<Solution> CwfSolver::PackSolution(
     const std::vector<int>& order_permutation, int* score,
     bool enable_log) const {
@@ -523,8 +531,8 @@ std::unique_ptr<Solution> CwfSolver::PackSolution(
       continue;
     }
 
-    // At this point, we have it all in the closest warehouse, so let's deliver
-    // it all.
+    // At this point, we have everything we need in the closest warehouse, so
+    // let's deliver it all.
     auto order_split =
         util::LoadSplitter::Split(needed, product_weights_, problem_.m());
     bool success = true;
@@ -532,6 +540,7 @@ std::unique_ptr<Solution> CwfSolver::PackSolution(
       auto& curr_split = order_split.repeated_splits.front();
       CHECK(curr_split.times > 0);
       CHECK(curr_split.num_items > 0);
+      log_single_split_size(curr_split.single_split.size());
 
       // Find the most suitable drone.
       int best_d = -1;
@@ -727,7 +736,9 @@ std::unique_ptr<Solution> CwfSolver::Solve() {
   IterativeAlloc(FLAGS_cwf_alloc_iter);
   std::vector<int> order_perm = GenerateOrderPermutation();
   order_perm = ImporveOrderPermutation(order_perm, FLAGS_cwf_perm_iter);
-  return PackSolution(order_perm);
+  auto solution = PackSolution(order_perm);
+  print_single_split_sizes();
+  return solution;
 }
 
 }  // namespace drones
