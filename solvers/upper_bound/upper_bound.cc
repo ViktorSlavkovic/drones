@@ -25,28 +25,6 @@ using operations_research::RoutingIndexManager;
 using operations_research::RoutingModel;
 using operations_research::RoutingSearchParameters;
 
-void PrintSolution(const RoutingIndexManager& manager,
-                   const RoutingModel& routing, const Assignment& solution) {
-  // Inspect solution.
-  LOG(INFO) << "Objective: " << solution.ObjectiveValue() << " miles";
-  int64 index = routing.Start(0);
-  LOG(INFO) << "Route:";
-  int64 distance{0};
-  std::stringstream route;
-  while (routing.IsEnd(index) == false) {
-    route << manager.IndexToNode(index).value() << " -> ";
-    int64 previous_index = index;
-    index = solution.Value(routing.NextVar(index));
-    distance += const_cast<RoutingModel&>(routing).GetArcCostForVehicle(
-        previous_index, index, 0LL);
-  }
-  LOG(INFO) << route.str() << manager.IndexToNode(index).value();
-  LOG(INFO) << "Route distance: " << distance << "miles";
-  LOG(INFO) << "";
-  LOG(INFO) << "Advanced usage:";
-  LOG(INFO) << "Problem solved in " << routing.solver()->wall_time() << "ms";
-}
-
 int UpperBound::Calc() {
   if (upper_bound_ >= 0) {
     return upper_bound_;
