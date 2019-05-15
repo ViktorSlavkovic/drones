@@ -41,6 +41,7 @@ class ProblemManager {
 
  private:
   static ProblemType DetermineProblemType(const Problem& problem);
+  static void AddDistances(Problem* problem);
 };
 
 }  // namespace drones

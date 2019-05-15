@@ -41,6 +41,21 @@ message ProblemType {
   optional bool IPO_1 = 7 [default = false];
 }
 
+message Distances {
+  message DistanceTo {
+    // Contains one item per location code:
+    //   Warehouse locations [0, Nw - 1] are coded as [0, Nw - 1]
+    //   Order locations [0, No - 1] are coded as [Nw, No + Nw -1]
+    // Each item represents ceil distance to the location determined by it's
+    // index from the owner's (see src filed below) location.
+    repeated int32 dst = 1;
+  }
+  // Contains one item per location code.
+  // Each item repressents distances from the location determined by it's index
+  // to all locations (including the indexed location).
+  repeated DistanceTo src = 1;
+}
+
 message Problem {
   optional int32 T = 1;
   optional int32 Np = 2;
@@ -52,5 +67,6 @@ message Problem {
   repeated Warehouse warehouse = 8;
   repeated Order order = 9;
   optional ProblemType problem_type = 10;
+  optional Distances dist = 11;
 }
 

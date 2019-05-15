@@ -1,5 +1,6 @@
 #include "problem_manager.h"
 
+#include <cmath>
 #include <fstream>
 #include <numeric>
 #include <random>
@@ -122,6 +123,7 @@ std::unique_ptr<Problem> ProblemManager::GenerateProblem(
   }
 
   *problem->mutable_problem_type() = DetermineProblemType(*problem);
+  AddDistances(problem.get());
   return problem;
 }
 
@@ -175,6 +177,7 @@ std::unique_ptr<Problem> ProblemManager::LoadFromProblemFile(
   }
   fin.close();
   *problem->mutable_problem_type() = DetermineProblemType(*problem);
+  AddDistances(problem.get());
   return problem;
 }
 
@@ -302,6 +305,26 @@ ProblemType ProblemManager::DetermineProblemType(const Problem &problem) {
   problem_type.set_s0_inf(S0_inf);
 
   return problem_type;
+}
+
+void ProblemManager::AddDistances(Problem* problem) {
+  if (problem == nullptr) return;
+  auto get_loc = [&](int idx) {
+    return idx < problem->nw()
+           ? problem->warehouse(idx).location()
+           : problem->order(idx - problem->nw()).location();
+  };
+  for (int src = 0; src < problem->nw() + problem->no(); src++) {
+    problem->mutable_dist()->add_src();
+    auto src_loc = get_loc(src);
+    for (int dst = 0; dst < problem->nw() + problem->no(); dst++) {
+      auto dst_loc = get_loc(dst);
+      double dx = dst_loc.x() - src_loc.x();
+      double dy = dst_loc.y() - dst_loc.y();
+      int dist = ceil(sqrt(dx * dx + dy * dy));
+      problem->mutable_dist()->mutable_src(src)->add_dst(dist);
+    }
+  } 
 }
 
 }  // namespace drones
