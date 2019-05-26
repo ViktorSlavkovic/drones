@@ -320,7 +320,7 @@ void ProblemManager::AddDistances(Problem* problem) {
     for (int dst = 0; dst < problem->nw() + problem->no(); dst++) {
       auto dst_loc = get_loc(dst);
       double dx = dst_loc.x() - src_loc.x();
-      double dy = dst_loc.y() - dst_loc.y();
+      double dy = dst_loc.y() - src_loc.y();
       int dist = ceil(sqrt(dx * dx + dy * dy));
       problem->mutable_dist()->mutable_src(src)->add_dst(dist);
     }
