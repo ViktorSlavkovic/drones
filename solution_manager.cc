@@ -80,11 +80,14 @@ bool SolutionManager::Simulate(const Solution& solution, int* score) {
   // moments. All the time moments in which unloading or delivery should be
   // performed are added here, even if with empty vectors.
   std::map<int, std::vector<DroneCommand>> timeline;
+  int max_cpd = 0;  /* max commands per drone */
   for (const auto& drone_desc : solution.drone_desc()) {
+    max_cpd = std::max(max_cpd, drone_desc.drone_command_size());
     for (const auto& cmd : drone_desc.drone_command()) {
       timeline[cmd.start_time()].push_back(cmd);
     }
   }
+  LOG(INFO) << "Max commands per drone: " << max_cpd;
 
   const auto& problem = solution.problem();
   // Drone's location next time when it's ready.
