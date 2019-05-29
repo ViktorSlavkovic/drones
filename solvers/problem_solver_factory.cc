@@ -8,6 +8,7 @@
 #include "solvers/sp1_solver/sp1_solver.h"
 #include "solvers/sp2_solver/sp2_solver.h"
 #include "solvers/sp4_solver/sp4_solver.h"
+#include "solvers/ga_solver/ga_solver.h"
 
 namespace drones {
 
@@ -28,6 +29,8 @@ std::unique_ptr<ProblemSolver> ProblemSolverFactory::CreateSolver(
     solver = std::make_unique<EcfSolver>(problem);
   } else if (solver_type == "cwf") {
     solver = std::make_unique<CwfSolver>(problem);
+  } else if (solver_type == "ga") {
+    solver = std::make_unique<GaSolver>(problem);
   } else {
     LOG(ERROR) << "Invalid solver type: " << solver_type;
     return nullptr;

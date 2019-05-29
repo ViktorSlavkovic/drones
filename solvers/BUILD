@@ -9,6 +9,7 @@ cc_library(
         ":problem_solver",
         "//solvers/cwf_solver",
         "//solvers/ecf_solver",
+        "//solvers/ga_solver",
         "//solvers/lp_solver",
         "//solvers/random_solver",
         "//solvers/sp1_solver",
