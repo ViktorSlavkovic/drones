@@ -52,20 +52,12 @@ DEFINE_bool(ga_mutate_all_drones, false,
 namespace drones {
 GaSolver::GaSolver(const Problem& problem)
     : ProblemSolver(problem),
-      closest_ws_(CalcClosestWarehouses(problem)),
-      product_weights_(PrepareProductWeights(problem)),
-      alloc_(AllocateOrDie(problem)),
-      strategy_(FilterStrategies(this)),
-      random_engine_(std::random_device()()),
-      drone_location_(),
-      drone_busy_until_(),
-      pending_warehouses_(),
-      pending_orders_(),
-      pending_orders_weight_(),
-      transactions_(),
-      solution_(nullptr),
-      latest_delivery_time_(),
-      score_(0) {}
+      kClosestWarehouses(CalcClosestWarehouses(problem)),
+      kProductWeights(PrepareProductWeights(problem)),
+      kAlloc(AllocateOrDie(problem)),
+      kStrategies(FilterStrategies(this)),
+      kLog2NumStrategies(ceil(log2(kStrategies.size()))),
+      random_engine_(std::random_device()()) {}
 
 std::vector<std::vector<int>> GaSolver::CalcClosestWarehouses(
     const Problem& problem) {
@@ -102,8 +94,8 @@ util::Allocator::Alloc GaSolver::AllocateOrDie(const Problem& problem) {
   return alloc;
 }
 
-std::vector<std::function<bool(int)>> GaSolver::FilterStrategies(
-    GaSolver* ga_solver) {
+std::vector<std::function<bool(GaSolver::SolutionBuilder*, int)>>
+GaSolver::FilterStrategies(GaSolver* ga_solver) {
   std::set<std::string> split = absl::StrSplit(FLAGS_ga_forbidden_strategies,
                                                ",", absl::SkipWhitespace());
   std::set<int> forbidden_strategies;
@@ -113,76 +105,74 @@ std::vector<std::function<bool(int)>> GaSolver::FilterStrategies(
     forbidden_strategies.insert(strategy);
   }
 
-  std::vector<std::function<bool(int)>> res;
+  std::vector<std::function<bool(SolutionBuilder*, int)>> res;
   if (forbidden_strategies.count(0) == 0) {
-    res.push_back([=](int d) { return ga_solver->Strategy0(d); });
+    res.push_back([=](SolutionBuilder* sb, int d) { return sb->Strategy0(d); });
   }
   if (forbidden_strategies.count(1) == 0) {
-    res.push_back([=](int d) { return ga_solver->Strategy1(d); });
+    res.push_back([=](SolutionBuilder* sb, int d) { return sb->Strategy1(d); });
   }
   if (forbidden_strategies.count(2) == 0) {
-    res.push_back([=](int d) { return ga_solver->Strategy2(d); });
+    res.push_back([=](SolutionBuilder* sb, int d) { return sb->Strategy2(d); });
   }
   if (forbidden_strategies.count(3) == 0) {
-    res.push_back([=](int d) { return ga_solver->Strategy3(d); });
+    res.push_back([=](SolutionBuilder* sb, int d) { return sb->Strategy3(d); });
   }
   if (forbidden_strategies.count(4) == 0) {
-    res.push_back([=](int d) { return ga_solver->Strategy4(d); });
+    res.push_back([=](SolutionBuilder* sb, int d) { return sb->Strategy4(d); });
   }
   if (forbidden_strategies.count(5) == 0) {
-    res.push_back([=](int d) { return ga_solver->Strategy5(d); });
+    res.push_back([=](SolutionBuilder* sb, int d) { return sb->Strategy5(d); });
   }
   if (forbidden_strategies.count(6) == 0) {
-    res.push_back([=](int d) { return ga_solver->Strategy6(d); });
+    res.push_back([=](SolutionBuilder* sb, int d) { return sb->Strategy6(d); });
   }
   if (forbidden_strategies.count(7) == 0) {
-    res.push_back([=](int d) { return ga_solver->Strategy7(d); });
+    res.push_back([=](SolutionBuilder* sb, int d) { return sb->Strategy7(d); });
   }
   return res;
 }
 
-void GaSolver::InitSolution() {
-  drone_location_.clear();
-  drone_location_.resize(problem_.nd(), 0);
-  drone_busy_until_.clear();
-  drone_busy_until_.resize(problem_.nd(), 0);
-  pending_warehouses_.clear();
-  pending_orders_.clear();
-  for (int o = 0; o < problem_.no(); o++) {
-    for (const auto& wp_i : alloc_[o]) {
+GaSolver::SolutionBuilder::SolutionBuilder(const GaSolver& solver)
+    : solver(solver),
+      problem(solver.problem_),
+      drone_location(problem.nd(), 0),
+      drone_busy_until(problem.nd(), 0),
+      pending_warehouses(),
+      pending_orders(),
+      pending_orders_weight(problem.no(), 0),
+      transactions(),
+      latest_delivery_time(problem.no(), -1),
+      score(0) {
+  for (int o = 0; o < problem.no(); o++) {
+    for (const auto& wp_i : solver.kAlloc[o]) {
       if (wp_i.second > 0) {
-        pending_warehouses_[wp_i.first.first][o][-1][wp_i.first.second] +=
+        pending_warehouses[wp_i.first.first][o][-1][wp_i.first.second] +=
             wp_i.second;
-        pending_orders_[o][wp_i.first.first][wp_i.first.second] += wp_i.second;
+        pending_orders[o][wp_i.first.first][wp_i.first.second] += wp_i.second;
       }
     }
   }
-  pending_orders_weight_.clear();
-  pending_orders_weight_.resize(problem_.no(), 0);
-  for (int o = 0; o < problem_.no(); o++) {
-    for (int p = 0; p < problem_.np(); p++) {
-      pending_orders_weight_[o] +=
-          problem_.product(p).m() * problem_.order(o).request(p);
+  for (int o = 0; o < problem.no(); o++) {
+    for (int p = 0; p < problem.np(); p++) {
+      pending_orders_weight[o] +=
+          problem.product(p).m() * problem.order(o).request(p);
     }
   }
-  transactions_.clear();
-  solution_ = std::make_unique<Solution>();
-  *solution_->mutable_problem() = problem_;
-  for (int d = 0; d < problem_.nd(); d++) {
-    solution_->add_drone_desc();
+  solution = std::make_unique<Solution>();
+  *solution->mutable_problem() = problem;
+  for (int d = 0; d < problem.nd(); d++) {
+    solution->add_drone_desc();
   }
-  latest_delivery_time_.clear();
-  latest_delivery_time_.resize(problem_.no(), -1);
-  score_ = 0;
 }
 
-std::pair<int, std::map<int, int>> GaSolver::CanTake(int arrival, int w,
-                                                     int o) {
+std::pair<int, std::map<int, int>> GaSolver::SolutionBuilder::CanTake(
+    int arrival, int w, int o) {
   CHECK(0 <= w) << w;
-  CHECK(w < problem_.nw()) << w;
+  CHECK(w < problem.nw()) << w;
   int when = -1;
   std::map<int, int> what;
-  for (const auto& t_pns : pending_warehouses_[w][o]) {
+  for (const auto& t_pns : pending_warehouses[w][o]) {
     // Allow for consecutive unload.
     // TODO(viktors): This means we don't allow nested loads and unloads (
     //                ex. just shifted by 1). Improve?
@@ -196,16 +186,17 @@ std::pair<int, std::map<int, int>> GaSolver::CanTake(int arrival, int w,
   return {wait_time, what};
 }
 
-void GaSolver::Take(int arrival, int w, int o, std::map<int, int> what,
-                    bool manual_relax_order) {
+void GaSolver::SolutionBuilder::Take(int arrival, int w, int o,
+                                     std::map<int, int> what,
+                                     bool manual_relax_order) {
   CHECK(0 <= w) << w;
-  CHECK(w < problem_.nw()) << w;
+  CHECK(w < problem.nw()) << w;
 
   // Take the latest arrivals first.
   CHECK(!what.empty());
-  CHECK(!pending_warehouses_[w][o].empty());
-  auto it = pending_warehouses_[w][o].upper_bound(arrival);
-  CHECK(it != pending_warehouses_[w][o].begin());
+  CHECK(!pending_warehouses[w][o].empty());
+  auto it = pending_warehouses[w][o].upper_bound(arrival);
+  CHECK(it != pending_warehouses[w][o].begin());
   it--;
   std::set<int> to_erase;
   std::map<int, int> what_bak = what;
@@ -232,28 +223,28 @@ void GaSolver::Take(int arrival, int w, int o, std::map<int, int> what,
       }
     }
     if (!what.empty()) {
-      CHECK(it != pending_warehouses_[w][o].begin());
+      CHECK(it != pending_warehouses[w][o].begin());
       it--;
     }
   }
   for (int t : to_erase) {
-    pending_warehouses_[w][o].erase(t);
+    pending_warehouses[w][o].erase(t);
   }
-  if (pending_warehouses_[w][o].empty()) {
-    pending_warehouses_[w].erase(o);
-    if (pending_warehouses_[w].empty()) {
-      pending_warehouses_.erase(w);
+  if (pending_warehouses[w][o].empty()) {
+    pending_warehouses[w].erase(o);
+    if (pending_warehouses[w].empty()) {
+      pending_warehouses.erase(w);
     }
   }
   // This also affects pending_orders becaouse of the warehouse info in it.
   if (!manual_relax_order) {
     for (const auto& pn : what_bak) {
-      if ((pending_orders_[o][w][pn.first] -= pn.second) == 0) {
-        pending_orders_[o][w].erase(pn.first);
-        if (pending_orders_[o][w].empty()) {
-          pending_orders_[o].erase(w);
-          if (pending_orders_[o].empty()) {
-            pending_orders_.erase(o);
+      if ((pending_orders[o][w][pn.first] -= pn.second) == 0) {
+        pending_orders[o][w].erase(pn.first);
+        if (pending_orders[o][w].empty()) {
+          pending_orders[o].erase(w);
+          if (pending_orders[o].empty()) {
+            pending_orders.erase(o);
           }
         }
       }
@@ -261,99 +252,101 @@ void GaSolver::Take(int arrival, int w, int o, std::map<int, int> what,
   }
 }
 
-void GaSolver::Give(int arrival, int w, int o, const std::map<int, int>& what) {
+void GaSolver::SolutionBuilder::Give(int arrival, int w, int o,
+                                     const std::map<int, int>& what) {
   CHECK(0 <= w) << w;
-  CHECK(w < problem_.nw()) << w;
+  CHECK(w < problem.nw()) << w;
 
   int t = arrival + 1;
   // Warning: Keep the same order as in the command-gen part.
   for (const auto& pn : what) {
-    pending_warehouses_[w][o][t++][pn.first] += pn.second;
+    pending_warehouses[w][o][t++][pn.first] += pn.second;
   }
 
   // This also affects pending_orders becaouse of the warehouse info in it.
   for (const auto& pn : what) {
-    pending_orders_[o][w][pn.first] += pn.second;
+    pending_orders[o][w][pn.first] += pn.second;
   }
 }
 
-bool GaSolver::RelaxOrder(int w, int o, std::map<int, int> what) {
+bool GaSolver::SolutionBuilder::RelaxOrder(int w, int o,
+                                           std::map<int, int> what) {
   bool order_complete = false;
   for (const auto& pn : what) {
     CHECK(!order_complete);
-    CHECK(pending_orders_[o][w][pn.first] >= pn.second);
-    if ((pending_orders_[o][w][pn.first] -= pn.second) == 0) {
-      pending_orders_[o][w].erase(pn.first);
-      if (pending_orders_[o][w].empty()) {
-        pending_orders_[o].erase(w);
-        if (pending_orders_[o].empty()) {
-          pending_orders_.erase(o);
+    CHECK(pending_orders[o][w][pn.first] >= pn.second);
+    if ((pending_orders[o][w][pn.first] -= pn.second) == 0) {
+      pending_orders[o][w].erase(pn.first);
+      if (pending_orders[o][w].empty()) {
+        pending_orders[o].erase(w);
+        if (pending_orders[o].empty()) {
+          pending_orders.erase(o);
           order_complete = true;
         }
       }
     }
-    pending_orders_weight_[o] -= problem_.product(pn.first).m() * pn.second;
+    pending_orders_weight[o] -= problem.product(pn.first).m() * pn.second;
   }
   return order_complete;
 }
 
-void GaSolver::CommandTransactionStart(int d) {
-  CHECK(transactions_.count(d) == 0)
-      << "There's another transaction happening.";
-  CommandTransactionData data{.curr_drone_location = drone_location_[d],
-                              .curr_drone_busy_until = drone_busy_until_[d],
+void GaSolver::SolutionBuilder::CommandTransactionStart(int d) {
+  CHECK(transactions.count(d) == 0) << "There's another transaction happening.";
+  CommandTransactionData data{.curr_drone_location = drone_location[d],
+                              .curr_drone_busy_until = drone_busy_until[d],
                               .gen_commands = 0};
-  transactions_[d] = data;
+  transactions[d] = data;
 }
 
-void GaSolver::CommandTransactionRollBack(int d) {
-  CHECK(transactions_.count(d) == 1) << "No transction has been started!";
-  while (transactions_[d].gen_commands--) {
-    solution_->mutable_drone_desc(d)->mutable_drone_command()->RemoveLast();
+void GaSolver::SolutionBuilder::CommandTransactionRollBack(int d) {
+  CHECK(transactions.count(d) == 1) << "No transction has been started!";
+  while (transactions[d].gen_commands--) {
+    solution->mutable_drone_desc(d)->mutable_drone_command()->RemoveLast();
   }
-  transactions_.erase(d);
+  transactions.erase(d);
 }
 
-void GaSolver::CommandTransactionCommit(int d) {
-  CHECK(transactions_.count(d) == 1) << "No transction has been started!";
-  drone_location_[d] = transactions_[d].curr_drone_location;
-  drone_busy_until_[d] = transactions_[d].curr_drone_busy_until;
-  transactions_.erase(d);
+void GaSolver::SolutionBuilder::CommandTransactionCommit(int d) {
+  CHECK(transactions.count(d) == 1) << "No transction has been started!";
+  drone_location[d] = transactions[d].curr_drone_location;
+  drone_busy_until[d] = transactions[d].curr_drone_busy_until;
+  transactions.erase(d);
 }
 
-bool GaSolver::Load(int d, int w, const std::map<int, int>& what,
-                    int wait_time) {
-  CHECK(transactions_.count(d) == 1)
+bool GaSolver::SolutionBuilder::Load(int d, int w,
+                                     const std::map<int, int>& what,
+                                     int wait_time) {
+  CHECK(transactions.count(d) == 1)
       << "Can't generate commands outside of a transaction";
 
   if (wait_time > 0) {
-    if (transactions_[d].curr_drone_busy_until + wait_time > problem_.t()) {
+    if (transactions[d].curr_drone_busy_until + wait_time > problem.t()) {
       return false;
     }
-    auto* cmd = solution_->mutable_drone_desc(d)->add_drone_command();
-    transactions_[d].gen_commands++;
+    auto* cmd = solution->mutable_drone_desc(d)->add_drone_command();
+    transactions[d].gen_commands++;
     cmd->set_drone(d);
     cmd->set_type(DroneCommand_CommandType_WAIT);
     cmd->set_duration(wait_time);
-    cmd->set_start_time(transactions_[d].curr_drone_busy_until + 1);
-    transactions_[d].curr_drone_busy_until += wait_time;
+    cmd->set_start_time(transactions[d].curr_drone_busy_until + 1);
+    transactions[d].curr_drone_busy_until += wait_time;
   }
 
   bool success = true;
-  int dist = problem_.dist().src(transactions_[d].curr_drone_location).dst(w);
+  int dist = problem.dist().src(transactions[d].curr_drone_location).dst(w);
   for (const auto& pn : what) {
-    auto* cmd = solution_->mutable_drone_desc(d)->add_drone_command();
-    transactions_[d].gen_commands++;
+    auto* cmd = solution->mutable_drone_desc(d)->add_drone_command();
+    transactions[d].gen_commands++;
     cmd->set_drone(d);
     cmd->set_type(DroneCommand_CommandType_LOAD);
     cmd->set_warehouse(w);
     cmd->set_product(pn.first);
     cmd->set_num_items(pn.second);
-    cmd->set_start_time(transactions_[d].curr_drone_busy_until + 1);
-    transactions_[d].curr_drone_busy_until += dist + 1;
-    transactions_[d].curr_drone_location = w;
+    cmd->set_start_time(transactions[d].curr_drone_busy_until + 1);
+    transactions[d].curr_drone_busy_until += dist + 1;
+    transactions[d].curr_drone_location = w;
     dist = 0;
-    if (transactions_[d].curr_drone_busy_until > problem_.t()) {
+    if (transactions[d].curr_drone_busy_until > problem.t()) {
       success = false;
       break;
     }
@@ -361,22 +354,23 @@ bool GaSolver::Load(int d, int w, const std::map<int, int>& what,
   return success;
 }
 
-bool GaSolver::Unload(int d, int w, const std::map<int, int>& what) {
+bool GaSolver::SolutionBuilder::Unload(int d, int w,
+                                       const std::map<int, int>& what) {
   bool success = true;
-  int dist = problem_.dist().src(transactions_[d].curr_drone_location).dst(w);
+  int dist = problem.dist().src(transactions[d].curr_drone_location).dst(w);
   for (const auto& pn : what) {
-    auto* cmd = solution_->mutable_drone_desc(d)->add_drone_command();
-    transactions_[d].gen_commands++;
+    auto* cmd = solution->mutable_drone_desc(d)->add_drone_command();
+    transactions[d].gen_commands++;
     cmd->set_drone(d);
     cmd->set_type(DroneCommand_CommandType_UNLOAD);
     cmd->set_warehouse(w);
     cmd->set_product(pn.first);
     cmd->set_num_items(pn.second);
-    cmd->set_start_time(transactions_[d].curr_drone_busy_until + 1);
-    transactions_[d].curr_drone_busy_until += dist + 1;
-    transactions_[d].curr_drone_location = w;
+    cmd->set_start_time(transactions[d].curr_drone_busy_until + 1);
+    transactions[d].curr_drone_busy_until += dist + 1;
+    transactions[d].curr_drone_location = w;
     dist = 0;
-    if (transactions_[d].curr_drone_busy_until > problem_.t()) {
+    if (transactions[d].curr_drone_busy_until > problem.t()) {
       success = false;
       break;
     }
@@ -384,24 +378,25 @@ bool GaSolver::Unload(int d, int w, const std::map<int, int>& what) {
   return success;
 }
 
-bool GaSolver::Deliver(int d, int o, const std::map<int, int>& what) {
+bool GaSolver::SolutionBuilder::Deliver(int d, int o,
+                                        const std::map<int, int>& what) {
   bool success = true;
-  int dist = problem_.dist()
-                 .src(transactions_[d].curr_drone_location)
-                 .dst(problem_.nw() + o);
+  int dist = problem.dist()
+                 .src(transactions[d].curr_drone_location)
+                 .dst(problem.nw() + o);
   for (const auto& pn : what) {
-    auto* cmd = solution_->mutable_drone_desc(d)->add_drone_command();
-    transactions_[d].gen_commands++;
+    auto* cmd = solution->mutable_drone_desc(d)->add_drone_command();
+    transactions[d].gen_commands++;
     cmd->set_drone(d);
     cmd->set_type(DroneCommand_CommandType_DELIVER);
     cmd->set_order(o);
     cmd->set_product(pn.first);
     cmd->set_num_items(pn.second);
-    cmd->set_start_time(transactions_[d].curr_drone_busy_until + 1);
-    transactions_[d].curr_drone_busy_until += dist + 1;
-    transactions_[d].curr_drone_location = problem_.nw() + o;
+    cmd->set_start_time(transactions[d].curr_drone_busy_until + 1);
+    transactions[d].curr_drone_busy_until += dist + 1;
+    transactions[d].curr_drone_location = problem.nw() + o;
     dist = 0;
-    if (transactions_[d].curr_drone_busy_until > problem_.t()) {
+    if (transactions[d].curr_drone_busy_until > problem.t()) {
       success = false;
       break;
     }
@@ -409,42 +404,42 @@ bool GaSolver::Deliver(int d, int o, const std::map<int, int>& what) {
   return success;
 }
 
-bool GaSolver::Wait(int d, int wait_time) {
+bool GaSolver::SolutionBuilder::Wait(int d, int wait_time) {
   CHECK(wait_time > 0);
-  if (transactions_[d].curr_drone_busy_until + wait_time > problem_.t()) {
+  if (transactions[d].curr_drone_busy_until + wait_time > problem.t()) {
     return false;
   }
-  auto* cmd = solution_->mutable_drone_desc(d)->add_drone_command();
+  auto* cmd = solution->mutable_drone_desc(d)->add_drone_command();
   cmd->set_drone(d);
   cmd->set_type(DroneCommand_CommandType_WAIT);
   cmd->set_duration(wait_time);
-  cmd->set_start_time(transactions_[d].curr_drone_busy_until + 1);
-  transactions_[d].curr_drone_busy_until += wait_time;
+  cmd->set_start_time(transactions[d].curr_drone_busy_until + 1);
+  transactions[d].curr_drone_busy_until += wait_time;
   return true;
 }
 
-bool GaSolver::ComboMoveAtomic(int d, int w_from, int w_to, int o) {
-  auto wt_what =
-      CanTake(drone_busy_until_[d] +
-                  problem_.dist().src(drone_location_[d]).dst(w_from),
-              w_from, o);
+bool GaSolver::SolutionBuilder::ComboMoveAtomic(int d, int w_from, int w_to,
+                                                int o) {
+  auto wt_what = CanTake(
+      drone_busy_until[d] + problem.dist().src(drone_location[d]).dst(w_from),
+      w_from, o);
   CHECK(!wt_what.second.empty());
 
-  auto split = util::LoadSplitter::SplitOnce(wt_what.second, product_weights_,
-                                             problem_.m());
+  auto split = util::LoadSplitter::SplitOnce(
+      wt_what.second, solver.kProductWeights, problem.m());
   CommandTransactionStart(d);
   if (!Load(d, w_from, split.single_split, wt_what.first)) {
     CommandTransactionRollBack(d);
     return false;
   }
   int load_arrival =
-      transactions_[d].curr_drone_busy_until - split.single_split.size();
+      transactions[d].curr_drone_busy_until - split.single_split.size();
   if (!Unload(d, w_to, split.single_split)) {
     CommandTransactionRollBack(d);
     return false;
   }
   int unload_arrival =
-      transactions_[d].curr_drone_busy_until - split.single_split.size();
+      transactions[d].curr_drone_busy_until - split.single_split.size();
   CommandTransactionCommit(d);
 
   Take(load_arrival, w_from, o, split.single_split);
@@ -452,14 +447,13 @@ bool GaSolver::ComboMoveAtomic(int d, int w_from, int w_to, int o) {
   return true;
 }
 
-bool GaSolver::ComboDeliverAtomic(int d, int w, int o) {
+bool GaSolver::SolutionBuilder::ComboDeliverAtomic(int d, int w, int o) {
   auto wt_what = CanTake(
-      drone_busy_until_[d] + problem_.dist().src(drone_location_[d]).dst(w), w,
-      o);
+      drone_busy_until[d] + problem.dist().src(drone_location[d]).dst(w), w, o);
   CHECK(!wt_what.second.empty());
 
-  auto split = util::LoadSplitter::SplitOnce(wt_what.second, product_weights_,
-                                             problem_.m());
+  auto split = util::LoadSplitter::SplitOnce(
+      wt_what.second, solver.kProductWeights, problem.m());
 
   CommandTransactionStart(d);
   if (!Load(d, w, split.single_split, wt_what.first)) {
@@ -467,7 +461,7 @@ bool GaSolver::ComboDeliverAtomic(int d, int w, int o) {
     return false;
   }
   int load_arrival =
-      transactions_[d].curr_drone_busy_until - split.single_split.size();
+      transactions[d].curr_drone_busy_until - split.single_split.size();
   if (!Deliver(d, o, split.single_split)) {
     CommandTransactionRollBack(d);
     return false;
@@ -476,25 +470,25 @@ bool GaSolver::ComboDeliverAtomic(int d, int w, int o) {
 
   Take(load_arrival, w, o, split.single_split, true);
   // Relax the order and augment the score if needed.
-  latest_delivery_time_[o] =
-      std::max(latest_delivery_time_[o], drone_busy_until_[d] - 1);
+  latest_delivery_time[o] =
+      std::max(latest_delivery_time[o], drone_busy_until[d] - 1);
   bool completed = RelaxOrder(w, o, split.single_split);
   if (completed) {
-    int t = latest_delivery_time_[o];
-    int to_add = ceil((100.0 * (problem_.t() - t)) / problem_.t());
-    score_ += to_add;
+    int t = latest_delivery_time[o];
+    int to_add = ceil((100.0 * (problem.t() - t)) / problem.t());
+    score += to_add;
   }
   return true;
 }
 
-bool GaSolver::Strategy0(int d) {
+bool GaSolver::SolutionBuilder::Strategy0(int d) {
   int src_w = -1;
   {
     int best_w = -1;
-    for (const auto& wx : pending_warehouses_) {
+    for (const auto& wx : pending_warehouses) {
       int w = wx.first;
-      if (best_w < 0 || problem_.dist().src(drone_location_[d]).dst(best_w) >
-                            problem_.dist().src(drone_location_[d]).dst(w)) {
+      if (best_w < 0 || problem.dist().src(drone_location[d]).dst(best_w) >
+                            problem.dist().src(drone_location[d]).dst(w)) {
         best_w = w;
       }
     }
@@ -504,17 +498,17 @@ bool GaSolver::Strategy0(int d) {
     }
   }
   CHECK(0 <= src_w);
-  CHECK(src_w < problem_.nw()) << src_w;
+  CHECK(src_w < problem.nw()) << src_w;
 
   int dst_o = -1;
   {
     int best_o = -1;
     int best_time = std::numeric_limits<int>::max();
-    for (const auto& ox : pending_warehouses_[src_w]) {
+    for (const auto& ox : pending_warehouses[src_w]) {
       int o = ox.first;
-      if (closest_ws_[o][0] == src_w) continue;
-      int dist = problem_.dist().src(src_w).dst(closest_ws_[o][0]);
-      auto wt_what = CanTake(drone_busy_until_[d] + dist, src_w, o);
+      if (solver.kClosestWarehouses[o][0] == src_w) continue;
+      int dist = problem.dist().src(src_w).dst(solver.kClosestWarehouses[o][0]);
+      auto wt_what = CanTake(drone_busy_until[d] + dist, src_w, o);
       int curr_time = dist + wt_what.first;
       if (curr_time < best_time) {
         best_o = o;
@@ -527,17 +521,17 @@ bool GaSolver::Strategy0(int d) {
     }
   }
 
-  return ComboMoveAtomic(d, src_w, closest_ws_[dst_o][0], dst_o);
+  return ComboMoveAtomic(d, src_w, solver.kClosestWarehouses[dst_o][0], dst_o);
 }
 
-bool GaSolver::Strategy1(int d) {
+bool GaSolver::SolutionBuilder::Strategy1(int d) {
   int src_w = -1;
   {
     int best_w = -1;
-    for (const auto& wx : pending_warehouses_) {
+    for (const auto& wx : pending_warehouses) {
       int w = wx.first;
-      if (best_w < 0 || problem_.dist().src(drone_location_[d]).dst(best_w) >
-                            problem_.dist().src(drone_location_[d]).dst(w)) {
+      if (best_w < 0 || problem.dist().src(drone_location[d]).dst(best_w) >
+                            problem.dist().src(drone_location[d]).dst(w)) {
         best_w = w;
       }
     }
@@ -547,16 +541,16 @@ bool GaSolver::Strategy1(int d) {
     }
   }
   CHECK(0 <= src_w);
-  CHECK(src_w < problem_.nw()) << src_w;
+  CHECK(src_w < problem.nw()) << src_w;
 
   int dst_o = -1;
   {
     int best_o = -1;
     int best_time = std::numeric_limits<int>::max();
-    for (const auto& ox : pending_warehouses_[src_w]) {
+    for (const auto& ox : pending_warehouses[src_w]) {
       int o = ox.first;
-      int dist = problem_.dist().src(src_w).dst(problem_.nw() + o);
-      auto wt_what = CanTake(drone_busy_until_[d] + dist, src_w, o);
+      int dist = problem.dist().src(src_w).dst(problem.nw() + o);
+      auto wt_what = CanTake(drone_busy_until[d] + dist, src_w, o);
       int curr_time = dist + wt_what.first;
       if (curr_time < best_time) {
         best_o = o;
@@ -572,30 +566,30 @@ bool GaSolver::Strategy1(int d) {
   return ComboDeliverAtomic(d, src_w, dst_o);
 }
 
-bool GaSolver::Strategy2(int d) {
+bool GaSolver::SolutionBuilder::Strategy2(int d) {
   // Find the order that's closest to completion.
   int best_o = -1;
-  for (int o = 0; o < problem_.no(); o++) {
-    if (pending_orders_weight_[o] < 1) continue;
+  for (int o = 0; o < problem.no(); o++) {
+    if (pending_orders_weight[o] < 1) continue;
     if (best_o < 0 ||
-        pending_orders_weight_[o] < pending_orders_weight_[best_o]) {
+        pending_orders_weight[o] < pending_orders_weight[best_o]) {
       best_o = o;
     }
   }
   if (best_o < 0) {
     return false;
   }
-  CHECK(pending_orders_.count(best_o) == 1);
+  CHECK(pending_orders.count(best_o) == 1);
 
   // Find the warehouse from which you can deliver first.
   int best_w = -1;
   int best_w_time = std::numeric_limits<int>::max();
-  for (const auto& wx : pending_orders_[best_o]) {
+  for (const auto& wx : pending_orders[best_o]) {
     int w = wx.first;
     int arrival =
-        drone_busy_until_[d] + problem_.dist().src(drone_location_[d]).dst(w);
-    int w_time = problem_.dist().src(drone_location_[d]).dst(w) +
-                 problem_.dist().src(w).dst(problem_.nw() + best_o) +
+        drone_busy_until[d] + problem.dist().src(drone_location[d]).dst(w);
+    int w_time = problem.dist().src(drone_location[d]).dst(w) +
+                 problem.dist().src(w).dst(problem.nw() + best_o) +
                  CanTake(arrival, w, best_o).first;
     if (best_w_time > w_time) {
       best_w = w;
@@ -609,20 +603,20 @@ bool GaSolver::Strategy2(int d) {
   return ComboDeliverAtomic(d, best_w, best_o);
 }
 
-bool GaSolver::Strategy3(int d) {
+bool GaSolver::SolutionBuilder::Strategy3(int d) {
   // Find the order that's closest to completion.
   int best_o = -1;
-  for (int o = 0; o < problem_.no(); o++) {
-    if (pending_orders_weight_[o] < 1) continue;
+  for (int o = 0; o < problem.no(); o++) {
+    if (pending_orders_weight[o] < 1) continue;
     if (best_o < 0 ||
-        pending_orders_weight_[o] < pending_orders_weight_[best_o]) {
+        pending_orders_weight[o] < pending_orders_weight[best_o]) {
       best_o = o;
     }
   }
   if (best_o < 0) {
     return false;
   }
-  CHECK(pending_orders_.count(best_o) == 1);
+  CHECK(pending_orders.count(best_o) == 1);
 
   // Take from some warehouse to one of the closer warehouses (top
   // kNumConsideredWarehouses only).
@@ -630,19 +624,19 @@ bool GaSolver::Strategy3(int d) {
   int best_w_src = -1;
   int best_w_dst = -1;
   int best_time = std::numeric_limits<int>::max();
-  for (const auto& wx : pending_orders_[best_o]) {
+  for (const auto& wx : pending_orders[best_o]) {
     int w_src = wx.first;
     int num_traversed = 0;
-    for (int w_dst : closest_ws_[best_o]) {
+    for (int w_dst : solver.kClosestWarehouses[best_o]) {
       if (num_traversed++ >= kNumConsideredWarehouses) break;
       if (w_dst == w_src) continue;
-      if (problem_.dist().src(w_dst).dst(problem_.nw() + best_o) >
-          problem_.dist().src(w_src).dst(problem_.nw() + best_o))
+      if (problem.dist().src(w_dst).dst(problem.nw() + best_o) >
+          problem.dist().src(w_src).dst(problem.nw() + best_o))
         continue;
-      int arrival = drone_busy_until_[d] +
-                    problem_.dist().src(drone_location_[d]).dst(w_src);
-      int curr_time = problem_.dist().src(drone_location_[d]).dst(w_src) +
-                      problem_.dist().src(w_src).dst(w_dst) +
+      int arrival = drone_busy_until[d] +
+                    problem.dist().src(drone_location[d]).dst(w_src);
+      int curr_time = problem.dist().src(drone_location[d]).dst(w_src) +
+                      problem.dist().src(w_src).dst(w_dst) +
                       CanTake(arrival, w_src, best_o).first;
       if (curr_time < best_time) {
         best_w_src = w_src;
@@ -658,31 +652,32 @@ bool GaSolver::Strategy3(int d) {
   return ComboMoveAtomic(d, best_w_src, best_w_dst, best_o);
 }
 
-bool GaSolver::Strategy4(int d) {
+bool GaSolver::SolutionBuilder::Strategy4(int d) {
   // Find the order that's closest to completion.
   int best_o = -1;
-  for (int o = 0; o < problem_.no(); o++) {
-    if (pending_orders_weight_[o] < 1) continue;
+  for (int o = 0; o < problem.no(); o++) {
+    if (pending_orders_weight[o] < 1) continue;
     if (best_o < 0 ||
-        pending_orders_weight_[o] < pending_orders_weight_[best_o]) {
+        pending_orders_weight[o] < pending_orders_weight[best_o]) {
       best_o = o;
     }
   }
   if (best_o < 0) {
     return false;
   }
-  CHECK(pending_orders_.count(best_o) == 1);
+  CHECK(pending_orders.count(best_o) == 1);
 
   int best_w_src = -1;
   int best_time = std::numeric_limits<int>::max();
-  for (const auto& wx : pending_orders_[best_o]) {
+  for (const auto& wx : pending_orders[best_o]) {
     int w_src = wx.first;
-    if (closest_ws_[best_o][0] == w_src) continue;
-    int arrival = drone_busy_until_[d] +
-                  problem_.dist().src(drone_location_[d]).dst(w_src);
-    int curr_time = problem_.dist().src(drone_location_[d]).dst(w_src) +
-                    problem_.dist().src(w_src).dst(closest_ws_[best_o][0]) +
-                    CanTake(arrival, w_src, best_o).first;
+    if (solver.kClosestWarehouses[best_o][0] == w_src) continue;
+    int arrival =
+        drone_busy_until[d] + problem.dist().src(drone_location[d]).dst(w_src);
+    int curr_time =
+        problem.dist().src(drone_location[d]).dst(w_src) +
+        problem.dist().src(w_src).dst(solver.kClosestWarehouses[best_o][0]) +
+        CanTake(arrival, w_src, best_o).first;
     if (curr_time < best_time) {
       best_w_src = w_src;
       best_time = curr_time;
@@ -691,22 +686,23 @@ bool GaSolver::Strategy4(int d) {
   if (best_w_src < 0) {
     return false;
   }
-  return ComboMoveAtomic(d, best_w_src, closest_ws_[best_o][0], best_o);
+  return ComboMoveAtomic(d, best_w_src, solver.kClosestWarehouses[best_o][0],
+                         best_o);
 }
 
-bool GaSolver::Strategy5(int d) {
+bool GaSolver::SolutionBuilder::Strategy5(int d) {
   // Find the fastest possible delivery.
   int best_w = -1;
   int best_o = -1;
   int best_time = std::numeric_limits<int>::max();
-  for (const auto& ox : pending_orders_) {
+  for (const auto& ox : pending_orders) {
     int o = ox.first;
-    for (const auto& wx : pending_orders_[o]) {
+    for (const auto& wx : pending_orders[o]) {
       int w = wx.first;
       int arrival =
-          drone_busy_until_[d] + problem_.dist().src(drone_location_[d]).dst(w);
-      int curr_time = problem_.dist().src(drone_location_[d]).dst(w) +
-                      problem_.dist().src(w).dst(problem_.nw() + o) +
+          drone_busy_until[d] + problem.dist().src(drone_location[d]).dst(w);
+      int curr_time = problem.dist().src(drone_location[d]).dst(w) +
+                      problem.dist().src(w).dst(problem.nw() + o) +
                       CanTake(arrival, w, o).first;
       if (best_time > curr_time) {
         best_w = w;
@@ -722,7 +718,7 @@ bool GaSolver::Strategy5(int d) {
   return ComboDeliverAtomic(d, best_w, best_o);
 }
 
-bool GaSolver::Strategy6(int d) {
+bool GaSolver::SolutionBuilder::Strategy6(int d) {
   // Take from some warehouse to one of the closer warehouses (top
   // kNumConsideredWarehouses only) of an order.
   constexpr const int kNumConsideredWarehouses = 5;
@@ -730,21 +726,21 @@ bool GaSolver::Strategy6(int d) {
   int best_w_src = -1;
   int best_w_dst = -1;
   int best_time = std::numeric_limits<int>::max();
-  for (const auto& ox : pending_orders_) {
+  for (const auto& ox : pending_orders) {
     int o = ox.first;
-    for (const auto& wx : pending_orders_[o]) {
+    for (const auto& wx : pending_orders[o]) {
       int w_src = wx.first;
       int num_traversed = 0;
-      for (int w_dst : closest_ws_[o]) {
+      for (int w_dst : solver.kClosestWarehouses[o]) {
         if (num_traversed++ >= kNumConsideredWarehouses) break;
         if (w_dst == w_src) continue;
-        if (problem_.dist().src(w_dst).dst(problem_.nw() + o) >
-            problem_.dist().src(w_src).dst(problem_.nw() + o))
+        if (problem.dist().src(w_dst).dst(problem.nw() + o) >
+            problem.dist().src(w_src).dst(problem.nw() + o))
           continue;
-        int arrival = drone_busy_until_[d] +
-                      problem_.dist().src(drone_location_[d]).dst(w_src);
-        int curr_time = problem_.dist().src(drone_location_[d]).dst(w_src) +
-                        problem_.dist().src(w_src).dst(w_dst) +
+        int arrival = drone_busy_until[d] +
+                      problem.dist().src(drone_location[d]).dst(w_src);
+        int curr_time = problem.dist().src(drone_location[d]).dst(w_src) +
+                        problem.dist().src(w_src).dst(w_dst) +
                         CanTake(arrival, w_src, o).first;
         if (curr_time < best_time) {
           best_o = o;
@@ -762,20 +758,21 @@ bool GaSolver::Strategy6(int d) {
   return ComboMoveAtomic(d, best_w_src, best_w_dst, best_o);
 }
 
-bool GaSolver::Strategy7(int d) {
+bool GaSolver::SolutionBuilder::Strategy7(int d) {
   int best_o = -1;
   int best_w_src = -1;
   int best_time = std::numeric_limits<int>::max();
-  for (const auto& ox : pending_orders_) {
+  for (const auto& ox : pending_orders) {
     int o = ox.first;
-    for (const auto& wx : pending_orders_[o]) {
+    for (const auto& wx : pending_orders[o]) {
       int w_src = wx.first;
-      if (closest_ws_[o][0] == w_src) continue;
-      int arrival = drone_busy_until_[d] +
-                    problem_.dist().src(drone_location_[d]).dst(w_src);
-      int curr_time = problem_.dist().src(drone_location_[d]).dst(w_src) +
-                      problem_.dist().src(w_src).dst(closest_ws_[o][0]) +
-                      CanTake(arrival, w_src, o).first;
+      if (solver.kClosestWarehouses[o][0] == w_src) continue;
+      int arrival = drone_busy_until[d] +
+                    problem.dist().src(drone_location[d]).dst(w_src);
+      int curr_time =
+          problem.dist().src(drone_location[d]).dst(w_src) +
+          problem.dist().src(w_src).dst(solver.kClosestWarehouses[o][0]) +
+          CanTake(arrival, w_src, o).first;
       if (curr_time < best_time) {
         best_o = o;
         best_w_src = w_src;
@@ -786,34 +783,32 @@ bool GaSolver::Strategy7(int d) {
   if (best_o < 0 || best_w_src < 0) {
     return false;
   }
-  return ComboMoveAtomic(d, best_w_src, closest_ws_[best_o][0], best_o);
+  return ComboMoveAtomic(d, best_w_src, solver.kClosestWarehouses[best_o][0],
+                         best_o);
 }
 
-void GaSolver::PackSolution(
-    const std::vector<std::vector<int>>& drone_strategies,
-    bool log_success_ratios) {
-  InitSolution();
-
-  std::vector<int> next_strategy(problem_.nd(), 0);
+void GaSolver::SolutionBuilder::Build(const DroneStrategies& drone_strategies,
+                                      bool log_success_ratios) {
+  std::vector<int> next_strategy(problem.nd(), 0);
   std::set<int> skipped_drones;
-  std::vector<int> strategy_attempt(strategy_.size(), 0);
-  std::vector<int> strategy_success(strategy_.size(), 0);
-  std::vector<int> executions_left(problem_.nd(), FLAGS_ga_strategy_repeats);
-  while (!pending_orders_.empty() && skipped_drones.size() < problem_.nd()) {
+  std::vector<int> strategy_attempt(solver.kStrategies.size(), 0);
+  std::vector<int> strategy_success(solver.kStrategies.size(), 0);
+  std::vector<int> executions_left(problem.nd(), FLAGS_ga_strategy_repeats);
+  while (!pending_orders.empty() && skipped_drones.size() < problem.nd()) {
     // Find the next drone.
     int d = -1;
-    for (int dd = 0; dd < problem_.nd(); dd++) {
+    for (int dd = 0; dd < problem.nd(); dd++) {
       if (skipped_drones.count(dd)) continue;
-      if (d < 0 || drone_busy_until_[dd] < drone_busy_until_[d]) {
+      if (d < 0 || drone_busy_until[dd] < drone_busy_until[d]) {
         d = dd;
       }
     }
     CHECK(d >= 0);
-    CHECK(d < problem_.nd());
+    CHECK(d < problem.nd());
 
     int strategy = drone_strategies[d][next_strategy[d]];
     strategy_attempt[strategy]++;
-    bool success = strategy_[strategy](d);
+    bool success = solver.kStrategies[strategy](this, d);
     if (!success) {
       skipped_drones.insert(d);
       executions_left[d] = 0;
@@ -830,7 +825,7 @@ void GaSolver::PackSolution(
 
   if (log_success_ratios) {
     LOG(INFO) << "Strategy success ratios (after-filtration indices):";
-    for (int strategy = 0; strategy < strategy_.size(); strategy++) {
+    for (int strategy = 0; strategy < solver.kStrategies.size(); strategy++) {
       LOG(INFO) << absl::Substitute("$0 : $1 / $2", strategy,
                                     strategy_success[strategy],
                                     strategy_attempt[strategy]);
@@ -838,29 +833,15 @@ void GaSolver::PackSolution(
   }
 }
 
-// TODO(viktors): Is this too slow?
-std::vector<std::vector<bool>> GaSolver::GenerateIndividual(
-    int log_num_strategies) {
-  std::vector<std::vector<bool>> res(
-      problem_.nd(),
-      std::vector<bool>(FLAGS_ga_strategies_per_drone * log_num_strategies));
+GaSolver::SolutionBuilder::DroneStrategies
+GaSolver::IndividualToDroneStrategies(const Individual& individual) {
+  SolutionBuilder::DroneStrategies drone_strategies(problem_.nd());
   for (int d = 0; d < problem_.nd(); d++) {
-    for (int bit = 0; bit < res[d].size(); bit++) {
-      res[d][bit] = static_cast<bool>(random_engine_() % 2);
-    }
-  }
-  return res;
-}
-
-int GaSolver::Eval(const std::vector<std::vector<bool>>& individual,
-                   int log_num_strategies, bool log_success_ratios) {
-  std::vector<std::vector<int>> drone_strategies(problem_.nd());
-  for (int d = 0; d < problem_.nd(); d++) {
-    for (int i = 0; i < individual[d].size() / log_num_strategies; i++) {
+    for (int i = 0; i < individual[d].size() / kLog2NumStrategies; i++) {
       int s = 0;
       int si = 1;
-      for (int j = 0; j < log_num_strategies; j++) {
-        int jj = i * log_num_strategies + j;
+      for (int j = 0; j < kLog2NumStrategies; j++) {
+        int jj = i * kLog2NumStrategies + j;
         if (individual[d][jj]) {
           s += si;
         }
@@ -869,17 +850,32 @@ int GaSolver::Eval(const std::vector<std::vector<bool>>& individual,
       drone_strategies[d].push_back(s);
     }
   }
-  PackSolution(drone_strategies);
-  return score_;
+  return drone_strategies;
 }
 
-void GaSolver::RunGA() {
+std::vector<std::vector<bool>> GaSolver::GenerateIndividual() {
+  std::vector<std::vector<bool>> res(
+      problem_.nd(),
+      std::vector<bool>(FLAGS_ga_strategies_per_drone * kLog2NumStrategies));
+  for (int d = 0; d < problem_.nd(); d++) {
+    for (int bit = 0; bit < res[d].size(); bit++) {
+      res[d][bit] = static_cast<bool>(random_engine_() % 2);
+    }
+  }
+  return res;
+}
+
+int GaSolver::Eval(const std::vector<std::vector<bool>>& individual) {
+  SolutionBuilder builder(*this);
+  builder.Build(IndividualToDroneStrategies(individual));
+  return builder.score;
+}
+
+GaSolver::Individual GaSolver::RunGA() {
   CHECK(FLAGS_ga_population_size == FLAGS_ga_selection_size +
-                                    FLAGS_ga_crossingover_size +
-                                    FLAGS_ga_mutation_size);
-  using Individual = std::vector<std::vector<bool>>;
-  const int log_num_strategies = ceil(log2(strategy_.size()));
-  const int bits_per_drone = FLAGS_ga_strategies_per_drone * log_num_strategies;
+                                        FLAGS_ga_crossingover_size +
+                                        FLAGS_ga_mutation_size);
+  const int bits_per_drone = FLAGS_ga_strategies_per_drone * kLog2NumStrategies;
   std::vector<Individual> population;
   std::vector<int> scores;
   int best_score = -1;
@@ -888,7 +884,7 @@ void GaSolver::RunGA() {
   // Generate the first population.
   LOG(INFO) << "Generating the initial population...";
   for (int i = 0; i < FLAGS_ga_population_size; i++) {
-    population.push_back(GenerateIndividual(log_num_strategies));
+    population.push_back(GenerateIndividual());
     scores.push_back(-1);
   }
   LOG(INFO) << "Generating the initial population... DONE";
@@ -899,7 +895,7 @@ void GaSolver::RunGA() {
         std::max(static_cast<int>(population.size()) - eval_from, 0);
     int curr_eval = 1;
     for (int i = eval_from; i < population.size(); i++) {
-      scores[i] = Eval(population[i], log_num_strategies);
+      scores[i] = Eval(population[i]);
       if (scores[i] > best_score) {
         best_score = scores[i];
         best_idx = i;
@@ -1003,13 +999,15 @@ void GaSolver::RunGA() {
     LOG(INFO) << "Evaluating...";
     do_evals(gen);
   }
-  Eval(population[best_idx], log_num_strategies, true);
+  return population[best_idx];
 }
 
 std::unique_ptr<Solution> GaSolver::Solve() {
-  RunGA();
-  LOG(INFO) << "Should give: " << score_;
-  return std::move(solution_);
+  auto best_individual = RunGA();
+  SolutionBuilder builder(*this);
+  builder.Build(IndividualToDroneStrategies(best_individual), true);
+  LOG(INFO) << "Should give: " << builder.score;
+  return std::move(builder.solution);
 }
 
 }  // namespace drones
