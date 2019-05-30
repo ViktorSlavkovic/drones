@@ -1034,8 +1034,8 @@ void GaSolver::RunEvaluator() {
     CallStatus status;
 
     void Proceed(int thread_id = -1) {
-      LOG(INFO) << "Proceed " << thread_id << " st " << status << " this "
-                << this;
+      //LOG(INFO) << "Proceed " << thread_id << " st " << status << " this "
+      //          << this;
       switch (status) {
         case CREATE: {
           service->RequestEval(&ctx, &req, &responder, cq, cq, this);
