@@ -1,0 +1,38 @@
+---
+apiVersion: "v1"
+kind: "ConfigMap"
+metadata:
+  name: "arbitrator-app-config"
+  namespace: "default"
+  labels:
+    app: "arbitrator-app"
+data:
+  PROBLEM_FILE: "busy_day.in"
+---
+apiVersion: "extensions/v1beta1"
+kind: "Deployment"
+metadata:
+  name: "arbitrator-app"
+  namespace: "default"
+  labels:
+    app: "arbitrator-app"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: "arbitrator-app"
+  template:
+    metadata:
+      labels:
+        app: "arbitrator-app"
+    spec:
+      containers:
+      - name: "ga-arbitrator-image-sha256"
+        image: "gcr.io/vs-gcp-drones/ga_arbitrator-image@sha256:8b414f2553b3c240ef93faf731e625fa5ccea03e79edd7566f0f273a12400db0"
+        env:
+        - name: "PROBLEM_FILE"
+          valueFrom:
+            configMapKeyRef:
+              key: "PROBLEM_FILE"
+              name: "arbitrator-app-config"
+

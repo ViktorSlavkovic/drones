@@ -45,6 +45,9 @@ DEFINE_string(solver_type, "random",
 DEFINE_bool(
     check, true,
     "If true, the solution will be checked - simulated, validated and scored.");
+DEFINE_bool(
+    inf_loop_end, true,
+    "If true, main() won't return. Instead, it will loop indefinitely.");
 
 std::unique_ptr<drones::Problem> get_problem() {
   if (FLAGS_gen_problem) {
@@ -117,6 +120,8 @@ int main(int argc, char* argv[]) {
                                                       FLAGS_solution_file))
         << "Failed to save solution to: " << FLAGS_solution_file;
   }
+
+  while (FLAGS_inf_loop_end) {}
 
   return 0;
 }

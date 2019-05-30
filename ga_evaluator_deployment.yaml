@@ -1,0 +1,71 @@
+---
+apiVersion: "v1"
+kind: "ConfigMap"
+metadata:
+  name: "evaluator-app-config"
+  namespace: "default"
+  labels:
+    app: "evaluator-app"
+data:
+  PROBLEM_FILE: "busy_day.in"
+---
+apiVersion: "extensions/v1beta1"
+kind: "Deployment"
+metadata:
+  name: "evaluator-app"
+  namespace: "default"
+  labels:
+    app: "evaluator-app"
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: "evaluator-app"
+  template:
+    metadata:
+      labels:
+        app: "evaluator-app"
+    spec:
+      containers:
+      - name: "ga-evaluator-image-sha256"
+        image: "gcr.io/vs-gcp-drones/ga_evaluator-image@sha256:3fa9fba185b7b31f01b8caac54688b4749296818eeec9018685129e3d8d566c9"
+        env:
+        - name: "PROBLEM_FILE"
+          valueFrom:
+            configMapKeyRef:
+              key: "PROBLEM_FILE"
+              name: "evaluator-app-config"
+---
+apiVersion: "autoscaling/v2beta1"
+kind: "HorizontalPodAutoscaler"
+metadata:
+  name: "evaluator-app-hpa"
+  namespace: "default"
+  labels:
+    app: "evaluator-app"
+spec:
+  scaleTargetRef:
+    kind: "Deployment"
+    name: "evaluator-app"
+    apiVersion: "apps/v1beta1"
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+  - type: "Resource"
+    resource:
+      name: "cpu"
+      targetAverageUtilization: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: "evaluator"
+spec:
+  type: ClusterIP
+  selector:
+    app: "evaluator-app"
+  ports:
+  - protocol: TCP
+    port: 12345
+    targetPort: 12345
+
