@@ -877,7 +877,7 @@ GaSolver::IndividualToDroneStrategies(const Individual& individual) {
         }
         si <<= 1;
       }
-      drone_strategies[d].push_back(s);
+      drone_strategies[d].push_back(s % kStrategies.size());
     }
   }
   return drone_strategies;
