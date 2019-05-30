@@ -1,0 +1,20 @@
+syntax = "proto2";
+
+package drones.ga_solver;
+
+message DroneStrategies {
+  repeated int32 strategy = 1;
+}
+
+message EvaluationRequest {
+  repeated DroneStrategies drone_strategies = 1;  
+}
+
+message EvaluationResponse {
+  optional int32 score = 1;
+}
+
+service Evaluator {
+  rpc Eval(EvaluationRequest) returns (EvaluationResponse) {}
+}
+

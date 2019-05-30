@@ -4,11 +4,15 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <random>
 #include <utility>
 #include <vector>
 
+#include "grpc++/grpc++.h"
 #include "problem.pb.h"
+#include "solution.pb.h"
+#include "solvers/ga_solver/evaluator_service.grpc.pb.h"
 #include "solvers/problem_solver.h"
 #include "solvers/util/allocator.h"
 
@@ -184,6 +188,10 @@ class GaSolver : public ProblemSolver {
   const std::vector<std::function<bool(SolutionBuilder*, int)>> kStrategies;
   // The number of bits required to store an index of kStrategies.
   const int kLog2NumStrategies;
+  // Protects kAlloc.
+  std::mutex mux_kAlloc;
+  // Protects kProductWeights.
+  std::mutex mux_kProductWeights;
 
   // Calculates closest warehouses for each order (see kClosestWarehouses).
   static std::vector<std::vector<int>> CalcClosestWarehouses(
@@ -206,10 +214,21 @@ class GaSolver : public ProblemSolver {
       const Individual& individual);
   // Generates a single individual in the GA's population.
   Individual GenerateIndividual();
-  // Do a single evaluation.
+  // Do a single evaluation. This is thread-safe.
   int Eval(const Individual& individual);
+  // Do all required evals in a single generation. Returns the best score.
+  // This is the standalone version.
+  int DoEvals(const std::vector<Individual>& population, int preg_gen_best,
+              int eval_from, int generation, std::vector<int>* scores_out);
+  // Do all required evals in a single generation. Returns the best score.
+  // This is the arbitrator version.
+  int DoRemoteEvals(const std::vector<Individual>& population,
+                    int preg_gen_best, int eval_from, int generation,
+                    std::vector<int>* scores_out);
   // Runs the Genetic Algorithm, and stores the best solution in solution_.
   Individual RunGA();
+  // Acts as an evaluator.
+  void RunEvaluator();
 };
 }  // namespace drones
 
