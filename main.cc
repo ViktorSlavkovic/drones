@@ -1,4 +1,6 @@
 #include "absl/strings/substitute.h"
+#include "absl/time/clock.h"
+#include "absl/time/time.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
 #include "google/protobuf/text_format.h"
@@ -100,8 +102,11 @@ int main(int argc, char* argv[]) {
     }
   }
 
+  auto start_time = absl::Now();
   auto solution = get_solution(*problem);
   CHECK(solution != nullptr) << "Failed to create the solution object.";
+  LOG(INFO) << absl::Substitute("Solver finished in: $0",
+                                absl::FormatDuration(absl::Now() - start_time));
 
   if (FLAGS_check) {
     int score = -1;
@@ -121,7 +126,8 @@ int main(int argc, char* argv[]) {
         << "Failed to save solution to: " << FLAGS_solution_file;
   }
 
-  while (FLAGS_inf_loop_end) {}
+  while (FLAGS_inf_loop_end) {
+  }
 
   return 0;
 }
