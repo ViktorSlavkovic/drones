@@ -28,7 +28,7 @@ spec:
     spec:
       containers:
       - name: "ga-evaluator-image-sha256"
-        image: "gcr.io/vs-gcp-drones/ga_evaluator-image@sha256:3fa9fba185b7b31f01b8caac54688b4749296818eeec9018685129e3d8d566c9"
+        image: "gcr.io/vs-gcp-drones/ga_evaluator-image:latest"
         env:
         - name: "PROBLEM_FILE"
           valueFrom:

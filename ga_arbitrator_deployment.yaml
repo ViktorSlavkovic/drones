@@ -8,6 +8,17 @@ metadata:
     app: "arbitrator-app"
 data:
   PROBLEM_FILE: "busy_day.in"
+  GA_FORBIDDEN_STRATEGIES: "100" # 100 doesn't exist, won't filter out anything.
+  GA_STRATEGIES_PER_DRONE: "3000"
+  GA_STRATEGY_REPEATS: "1"
+  GA_NUM_GENERATIONS: "100"
+  GA_POPULATION_SIZE: "100"
+  GA_SELECTION_SIZE: "50"
+  GA_CROSSINGOVER_SIZE: "30"
+  GA_MUTATION_SIZE: "20"
+  GA_MUTATION_PROB: "0.05"
+  GA_MAX_TWISTS: "20"
+  GA_MUTATE_ALL_DRONES: "true"
 ---
 apiVersion: "extensions/v1beta1"
 kind: "Deployment"
@@ -28,11 +39,66 @@ spec:
     spec:
       containers:
       - name: "ga-arbitrator-image-sha256"
-        image: "gcr.io/vs-gcp-drones/ga_arbitrator-image@sha256:8b414f2553b3c240ef93faf731e625fa5ccea03e79edd7566f0f273a12400db0"
+        image: "gcr.io/vs-gcp-drones/ga_arbitrator-image:latest"
         env:
         - name: "PROBLEM_FILE"
           valueFrom:
             configMapKeyRef:
               key: "PROBLEM_FILE"
+              name: "arbitrator-app-config"
+        - name: "GA_FORBIDDEN_STRATEGIES"
+          valueFrom:
+            configMapKeyRef:
+              key: "GA_FORBIDDEN_STRATEGIES"
+              name: "arbitrator-app-config"
+        - name: "GA_STRATEGIES_PER_DRONE"
+          valueFrom:
+            configMapKeyRef:
+              key: "GA_STRATEGIES_PER_DRONE"
+              name: "arbitrator-app-config"
+        - name: "GA_STRATEGY_REPEATS"
+          valueFrom:
+            configMapKeyRef:
+              key: "GA_STRATEGY_REPEATS"
+              name: "arbitrator-app-config"
+        - name: "GA_NUM_GENERATIONS"
+          valueFrom:
+            configMapKeyRef:
+              key: "GA_NUM_GENERATIONS"
+              name: "arbitrator-app-config"
+        - name: "GA_POPULATION_SIZE"
+          valueFrom:
+            configMapKeyRef:
+              key: "GA_POPULATION_SIZE"
+              name: "arbitrator-app-config"
+        - name: "GA_SELECTION_SIZE"
+          valueFrom:
+            configMapKeyRef:
+              key: "GA_SELECTION_SIZE"
+              name: "arbitrator-app-config"
+        - name: "GA_CROSSINGOVER_SIZE"
+          valueFrom:
+            configMapKeyRef:
+              key: "GA_CROSSINGOVER_SIZE"
+              name: "arbitrator-app-config"
+        - name: "GA_MUTATION_SIZE"
+          valueFrom:
+            configMapKeyRef:
+              key: "GA_MUTATION_SIZE"
+              name: "arbitrator-app-config"
+        - name: "GA_MUTATION_PROB"
+          valueFrom:
+            configMapKeyRef:
+              key: "GA_MUTATION_PROB"
+              name: "arbitrator-app-config"
+        - name: "GA_MAX_TWISTS"
+          valueFrom:
+            configMapKeyRef:
+              key: "GA_MAX_TWISTS"
+              name: "arbitrator-app-config"
+        - name: "GA_MUTATE_ALL_DRONES"
+          valueFrom:
+            configMapKeyRef:
+              key: "GA_MUTATE_ALL_DRONES"
               name: "arbitrator-app-config"
 

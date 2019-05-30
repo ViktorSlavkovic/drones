@@ -4,5 +4,5 @@ RUN pacman -Syq --noconfirm glibc
 WORKDIR /app
 COPY ./docker_data/* ./
 
-ENTRYPOINT ["sh", "-c", "./main --problem_file=$PROBLEM_FILE --solver_type=ga --ga_is_standalone=false --ga_is_arbitrator --ga_evaluator_service_address=$EVALUATOR_SERVICE_HOST:$EVALUATOR_SERVICE_PORT" ]
+ENTRYPOINT ["sh", "-c", "./main --problem_file=$PROBLEM_FILE --ga_forbidden_strategies=$GA_FORBIDDEN_STRATEGIES --ga_strategies_per_drone=$GA_STRATEGIES_PER_DRONE --ga_strategy_repeats=$GA_STRATEGY_REPEATS --ga_num_generations=$GA_NUM_GENERATIONS --ga_population_size=$GA_POPULATION_SIZE --ga_selection_size=$GA_SELECTION_SIZE --ga_crossingover_size=$GA_CROSSINGOVER_SIZE --ga_mutation_size=$GA_MUTATION_SIZE --ga_mutate_all_drones=$GA_MUTATE_ALL_DRONES --ga_max_twists=$GA_MAX_TWISTS --ga_mutation_prob=$GA_MUTATION_PROB --solver_type=ga --ga_is_standalone=false --ga_is_arbitrator --ga_evaluator_service_address=$EVALUATOR_SERVICE_HOST:$EVALUATOR_SERVICE_PORT" ]
 
