@@ -14,6 +14,7 @@
 #include "absl/strings/str_join.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/substitute.h"
+#include "absl/synchronization/barrier.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
 #include "solution.pb.h"
@@ -949,46 +950,94 @@ void GaSolver::DoEvals(const std::vector<Individual>& population, int eval_from,
   }
 }
 
+// TODO: This is supeeer ugly, assuming the same arguments except for population
+// (but same size!) and generation (but starts with 1!) and eval_from.
+// Get rid of this!
 void GaSolver::DoParallelEvals(const std::vector<Individual>& population,
                                int num_threads, int eval_from, int generation,
                                std::vector<int>* scores_out,
                                int* best_score_out,
                                Individual* best_individual_out) const {
   CHECK(num_threads > 1) << "Use DoEvals for 1 thread.";
-  std::vector<std::set<int>> todo(num_threads);
+  static std::vector<std::set<int>> todo;
+  static std::vector<std::thread> workers;
+  static std::atomic_int num_completed = 0;
+  static absl::Barrier* barrier1 = nullptr;
+  static absl::Barrier* barrier2 = nullptr;
+  static int total_evals = 0;
+  static int gen = 0;
+
+  static const std::vector<Individual>* population_ptr = &population;
+  static const std::vector<int>* scores_ptr = scores_out;
+  static const int num_threads_cp = num_threads;
+
+  total_evals = population.size() - eval_from;
+  gen = generation;
+  todo.clear();
+  todo.resize(num_threads);
   int where = num_threads - 1;
   for (int i = eval_from; i < population.size(); i++) {
     todo[where].insert(i);
     where = where ? where - 1 : num_threads - 1;
   }
   LOG(INFO) << "DoParallelEvals: Split items to threads";
-  const int total_evals = population.size() - eval_from;
-  std::atomic_int num_completed = 0;
+
   auto worker_fn = [&](int thread_id) {
-    for (int idx : todo[thread_id]) {
-      scores_out->at(idx) = Eval(population.at(idx));
-      num_completed++;
-      LOG(INFO) << absl::Substitute(
-          "[$0] Generation $1: eval $2 / $3 (idx=$4). GOT: $5", thread_id,
-          generation, num_completed.load(), total_evals, idx,
-          scores_out->at(idx));
+    while (true) {
+      if (barrier1->Block()) {
+        delete barrier1;
+        barrier1 = nullptr;
+      }
+      for (int idx : todo[thread_id]) {
+        scores_out->at(idx) = Eval(population_ptr->at(idx));
+        num_completed++;
+        LOG(INFO) << absl::Substitute(
+            "[$0] Generation $1: Eval $2 / $3 (idx=$4). GOT: $5", thread_id,
+            gen, num_completed.load(), total_evals, idx, scores_ptr->at(idx));
+      }
+      LOG(INFO) << absl::Substitute("Thread $0/$1 finished.", thread_id,
+                                    num_threads_cp);
+      if (barrier2->Block()) {
+        delete barrier2;
+        barrier2 = nullptr;
+      }
     }
   };
 
-  LOG(INFO) << absl::Substitute("DoParallelEvals: Dispatching $0 threads.",
-                                num_threads);
-
-  std::vector<std::thread> workers;
-  for (int t = 0; t < num_threads; t++) {
-    workers.emplace_back(worker_fn, t);
+  if (generation == 1) {
+    barrier1 = new absl::Barrier(num_threads + 1);
+    for (int t = 0; t < num_threads; t++) {
+      workers.emplace_back(worker_fn, t);
+    }
   }
 
-  LOG(INFO) << "Waiting for workers to finish...";
-  for (int t = 0; t < num_threads; t++) {
-    workers[t].join();
-    LOG(INFO) << absl::Substitute("Thread $0/$1 finished.", t + 1, num_threads);
+  using namespace std::chrono_literals;
+  LOG(INFO) << "Busy waiting for barrier2 to be deleted.";
+  while (barrier2) {
+    std::this_thread::sleep_for(2s);
+  }
+  barrier2 = new absl::Barrier(num_threads + 1);
+
+  LOG(INFO) << "Waking up the worker threads.";
+  num_completed = 0;
+  if (barrier1->Block()) {
+    delete barrier1;
+    barrier1 = nullptr;
   }
 
+  LOG(INFO) << "Awaken -> Busy waiting for barrier1 to be deleted.";
+  while (barrier1) {
+    std::this_thread::sleep_for(2s);
+  }
+  LOG(INFO) << "Deleted -> Wait for them to finish.";
+  barrier1 = new absl::Barrier(num_threads + 1);
+  if (barrier2->Block()) {
+    delete barrier2;
+    barrier2 = nullptr;
+  }
+  LOG(INFO) << "Finished - cycle end.";
+
+  LOG(INFO) << "Scores: " << absl::StrJoin(*scores_out, ",");
   int best_idx = std::max_element(scores_out->begin(), scores_out->end()) -
                  scores_out->begin();
   *best_score_out = scores_out->at(best_idx);
@@ -1237,8 +1286,12 @@ std::pair<int, GaSolver::Individual> GaSolver::RunGA() const {
         while (to_kick_out--) {
           std::uniform_int_distribution<int> gen_idx(0, population.size() - 1);
           int a = gen_idx(random_engine_);
-          int b = gen_idx(random_engine_);
+          int b;
+          while ((b = gen_idx(random_engine_)) == a) {}
+          
           int kick = scores[a] < scores[b] ? a : b;
+          LOG(INFO) << absl::Substitute("$0 <- $1", kick,
+                                        population.size() - 1);
           population[kick] = population.back();
           population.pop_back();
           scores[kick] = scores.back();
@@ -1264,7 +1317,8 @@ std::pair<int, GaSolver::Individual> GaSolver::RunGA() const {
           std::sort(twists.begin(), twists.end());
 
           int a = gen_idx(random_engine_);
-          int b = gen_idx(random_engine_);
+          int b;
+          while ((b = gen_idx(random_engine_)) == a) {}
 
           Individual child1(problem_.nd());
           Individual child2(problem_.nd());

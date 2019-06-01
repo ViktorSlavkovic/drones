@@ -17,6 +17,7 @@ cc_library(
         "@com_github_gflags_gflags//:gflags",
         "@com_github_glog_glog//:glog",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
         "@com_github_grpc_grpc//:grpc++_unsecure",
     ],
 )
