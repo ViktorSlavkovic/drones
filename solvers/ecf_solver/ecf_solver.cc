@@ -20,6 +20,12 @@ DEFINE_int32(ecf_split_iter, 10,
              "feedback in alloc.");
 DEFINE_int32(ecf_perm_iter, 100,
              "Number of order permutation improvement iterations.");
+DEFINE_string(ecf_save_initial_alloc, "",
+              "If not empty, the initial alloc will be saved to this path.");
+DEFINE_string(ecf_save_final_alloc, "",
+              "If not empty, the final alloc will be saved to this path.");
+DEFINE_string(ecf_load_alloc, "",
+              "If not empty, the initial alloc will be loaded from this path.");
 
 namespace drones {
 
@@ -29,7 +35,7 @@ EcfSolver::OrderSplits EcfSolver::IterativeSplit(int num_iter) const {
   for (int p = 0; p < problem_.np(); p++) {
     product_weights[p] = problem_.product(p).m();
   }
-  
+
   // [order][warehouse] -> coefficient
   using Feedback = std::map<int, std::map<int, double>>;
 
@@ -51,10 +57,21 @@ EcfSolver::OrderSplits EcfSolver::IterativeSplit(int num_iter) const {
 
   for (int iter = 1; iter <= num_iter; iter++) {
     LOG(INFO) << absl::Substitute("*** Split iter $0 / $1", iter, num_iter);
-
-    auto alloc = util::Allocator::AllocateWithDistFn(problem_, dist_fn);
+    auto alloc =
+        iter == 1 && !FLAGS_ecf_load_alloc.empty()
+            ? util::Allocator::LoadFromFile(problem_, FLAGS_ecf_load_alloc)
+            : util::Allocator::AllocateWithDistFn(problem_, dist_fn);
     CHECK(util::Allocator::VerifyAlloc(problem_, alloc)) << "Invalid alloc!";
     LOG(INFO) << "Successfully allocated.";
+
+    if (iter == 1 && !FLAGS_ecf_save_initial_alloc.empty()) {
+      util::Allocator::SaveToFile(alloc, problem_,
+                                  FLAGS_ecf_save_initial_alloc);
+    }
+
+    if (iter == num_iter && !FLAGS_ecf_save_final_alloc.empty()) {
+      util::Allocator::SaveToFile(alloc, problem_, FLAGS_ecf_save_final_alloc);
+    }
 
     res.clear();
     res.resize(problem_.no());

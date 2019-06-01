@@ -1,6 +1,8 @@
 #include "solvers/ga_solver/ga_solver.h"
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cmath>
 #include <map>
 #include <random>
@@ -19,6 +21,9 @@
 #include "solvers/util/allocator.h"
 #include "solvers/util/load_splitter.h"
 
+DEFINE_string(ga_alloc_from_file, "",
+              "If not empty, the alloc is loaded from the specified path "
+              "instead of being generated. Using OmogenHeap format.");
 DEFINE_string(ga_forbidden_strategies, "",
               "Indices of the forbidden strategies as CSV (e.g. 0,1,5).");
 DEFINE_int32(ga_strategies_per_drone, 1000,
@@ -55,6 +60,8 @@ DEFINE_bool(
     "If true, both GA logic and the evaluation are done in the same proccess "
     "(this one). If set, ga_is_arbitrator and ga_is_evaluator are ignored. If "
     "false, exactly one of ga_is_arbitrator, ga_is_evaluator has to be true.");
+DEFINE_int32(ga_standalone_num_threads, 1,
+             "Number of threads on which to run the standalone version.");
 DEFINE_bool(
     ga_is_arbitrator, false,
     "Only considered when ga_is_standalone is false. If set, the proccess is "
@@ -79,7 +86,7 @@ GaSolver::GaSolver(const Problem& problem)
       kClosestWarehouses(CalcClosestWarehouses(problem)),
       kProductWeights(PrepareProductWeights(problem)),
       kAlloc(AllocateOrDie(problem)),
-      kStrategies(FilterStrategies(this)),
+      kStrategies(FilterStrategies()),
       kLog2NumStrategies(ceil(log2(kStrategies.size()))),
       random_engine_(std::random_device()()) {}
 
@@ -109,6 +116,9 @@ std::map<int, int> GaSolver::PrepareProductWeights(const Problem& problem) {
 }
 
 util::Allocator::Alloc GaSolver::AllocateOrDie(const Problem& problem) {
+  if (!FLAGS_ga_alloc_from_file.empty()) {
+    return util::Allocator::LoadFromFile(problem, FLAGS_ga_alloc_from_file);
+  }
   util::Allocator::DistFn dist_fn = [&](int o, int w, int p) {
     return 2.0 * problem.dist().src(w).dst(problem.nw() + o);
   };
@@ -119,7 +129,7 @@ util::Allocator::Alloc GaSolver::AllocateOrDie(const Problem& problem) {
 }
 
 std::vector<std::function<bool(GaSolver::SolutionBuilder*, int)>>
-GaSolver::FilterStrategies(GaSolver* ga_solver) {
+GaSolver::FilterStrategies() {
   std::set<std::string> split = absl::StrSplit(FLAGS_ga_forbidden_strategies,
                                                ",", absl::SkipWhitespace());
   std::set<int> forbidden_strategies;
@@ -836,7 +846,8 @@ void GaSolver::SolutionBuilder::Build(const DroneStrategies& drone_strategies,
     CHECK(d >= 0);
     CHECK(d < problem.nd());
 
-    int strategy = drone_strategies[d][next_strategy[d]];
+    int strategy =
+        drone_strategies[d][next_strategy[d]] % solver.kStrategies.size();
     strategy_attempt[strategy]++;
     bool success = solver.kStrategies[strategy](this, d);
     if (!success) {
@@ -864,12 +875,13 @@ void GaSolver::SolutionBuilder::Build(const DroneStrategies& drone_strategies,
 }
 
 GaSolver::SolutionBuilder::DroneStrategies
-GaSolver::IndividualToDroneStrategies(const Individual& individual) {
+GaSolver::IndividualToDroneStrategies(const Individual& individual) const {
   SolutionBuilder::DroneStrategies drone_strategies(problem_.nd());
   for (int d = 0; d < problem_.nd(); d++) {
+    CHECK(individual[d].size() % kLog2NumStrategies == 0);
     for (int i = 0; i < individual[d].size() / kLog2NumStrategies; i++) {
-      int s = 0;
-      int si = 1;
+      uint8_t s = 0;
+      uint8_t si = 1;
       for (int j = 0; j < kLog2NumStrategies; j++) {
         int jj = i * kLog2NumStrategies + j;
         if (individual[d][jj]) {
@@ -877,13 +889,28 @@ GaSolver::IndividualToDroneStrategies(const Individual& individual) {
         }
         si <<= 1;
       }
-      drone_strategies[d].push_back(s % kStrategies.size());
+      drone_strategies[d].push_back(s);
     }
   }
   return drone_strategies;
 }
 
-std::vector<std::vector<bool>> GaSolver::GenerateIndividual() {
+GaSolver::Individual GaSolver::DroneStrategiesToIndividual(
+    const SolutionBuilder::DroneStrategies& drone_strategies) const {
+  Individual individual(problem_.nd());
+  for (int d = 0; d < problem_.nd(); d++) {
+    for (uint8_t s : drone_strategies[d]) {
+      uint8_t mask = 1;
+      for (int i = 0; i < kLog2NumStrategies; i++) {
+        individual[d].push_back((mask & s) == mask);
+        mask <<= 1;
+      }
+    }
+  }
+  return individual;
+}
+
+std::vector<std::vector<bool>> GaSolver::GenerateIndividual() const {
   std::vector<std::vector<bool>> res(
       problem_.nd(),
       std::vector<bool>(FLAGS_ga_strategies_per_drone * kLog2NumStrategies));
@@ -895,31 +922,85 @@ std::vector<std::vector<bool>> GaSolver::GenerateIndividual() {
   return res;
 }
 
-int GaSolver::Eval(const std::vector<std::vector<bool>>& individual) {
+int GaSolver::Eval(const Individual& individual) const {
   SolutionBuilder builder(*this);
   builder.Build(IndividualToDroneStrategies(individual));
   return builder.score;
 }
 
-int GaSolver::DoEvals(const std::vector<Individual>& population,
-                      int prev_gen_best, int eval_from, int generation,
-                      std::vector<int>* scores_out) {
+void GaSolver::DoEvals(const std::vector<Individual>& population, int eval_from,
+                       int generation, std::vector<int>* scores_out,
+                       int* best_score_out,
+                       Individual* best_individual_out) const {
   int total_evals =
       std::max(static_cast<int>(population.size()) - eval_from, 0);
-  int best = prev_gen_best;
+
   int curr_eval = 1;
   for (int i = eval_from; i < population.size(); i++) {
-    best = std::max(best, scores_out->at(i) = Eval(population[i]));
+    int curr_score = Eval(population[i]);
+    scores_out->at(i) = curr_score;
+    if (curr_score > *best_score_out) {
+      *best_score_out = curr_score;
+      *best_individual_out = population[i];
+    }
     LOG(INFO) << absl::Substitute(
         "Generation $0: eval $1 / $2. GOT: $3 BEST: $4", generation,
-        curr_eval++, total_evals, scores_out->at(i), best);
+        curr_eval++, total_evals, scores_out->at(i), *best_score_out);
   }
-  return best;
 }
 
-int GaSolver::DoRemoteEvals(const std::vector<Individual>& population,
-                            int prev_gen_best, int eval_from, int generation,
-                            std::vector<int>* scores_out) {
+void GaSolver::DoParallelEvals(const std::vector<Individual>& population,
+                               int num_threads, int eval_from, int generation,
+                               std::vector<int>* scores_out,
+                               int* best_score_out,
+                               Individual* best_individual_out) const {
+  CHECK(num_threads > 1) << "Use DoEvals for 1 thread.";
+  std::vector<std::set<int>> todo(num_threads);
+  int where = num_threads - 1;
+  for (int i = eval_from; i < population.size(); i++) {
+    todo[where].insert(i);
+    where = where ? where - 1 : num_threads - 1;
+  }
+  LOG(INFO) << "DoParallelEvals: Split items to threads";
+  const int total_evals = population.size() - eval_from;
+  std::atomic_int num_completed = 0;
+  auto worker_fn = [&](int thread_id) {
+    for (int idx : todo[thread_id]) {
+      scores_out->at(idx) = Eval(population.at(idx));
+      num_completed++;
+      LOG(INFO) << absl::Substitute(
+          "[$0] Generation $1: eval $2 / $3 (idx=$4). GOT: $5", thread_id,
+          generation, num_completed.load(), total_evals, idx,
+          scores_out->at(idx));
+    }
+  };
+
+  LOG(INFO) << absl::Substitute("DoParallelEvals: Dispatching $0 threads.",
+                                num_threads);
+
+  std::vector<std::thread> workers;
+  for (int t = 0; t < num_threads; t++) {
+    workers.emplace_back(worker_fn, t);
+  }
+
+  LOG(INFO) << "Waiting for workers to finish...";
+  for (int t = 0; t < num_threads; t++) {
+    workers[t].join();
+    LOG(INFO) << absl::Substitute("Thread $0/$1 finished.", t + 1, num_threads);
+  }
+
+  int best_idx = std::max_element(scores_out->begin(), scores_out->end()) -
+                 scores_out->begin();
+  *best_score_out = scores_out->at(best_idx);
+  *best_individual_out = population.at(best_idx);
+  LOG(INFO) << absl::Substitute("Generation $0: best_idx=$1 best_score=$2",
+                                generation, best_idx, *best_score_out);
+}
+
+void GaSolver::DoRemoteEvals(const std::vector<Individual>& population,
+                             int eval_from, int generation,
+                             std::vector<int>* scores_out, int* best_score_out,
+                             Individual* best_individual_out) const {
   using ga_solver::EvaluationRequest;
   using ga_solver::EvaluationResponse;
   using ga_solver::Evaluator;
@@ -936,59 +1017,95 @@ int GaSolver::DoRemoteEvals(const std::vector<Individual>& population,
   CompletionQueue cq;
 
   struct PendingCall {
+    int idx;
     EvaluationResponse reply;
     ClientContext context;
     Status status;
     std::unique_ptr<ClientAsyncResponseReader<EvaluationResponse>>
         response_reader;
   };
-  std::vector<PendingCall> pending_calls(population.size());
+  std::vector<PendingCall*> pending_calls(population.size(), nullptr);
 
   int total_evals =
       std::max(static_cast<int>(population.size()) - eval_from, 0);
-  int best = prev_gen_best;
+
+  auto send_request = [&](int i) {
+    // Reinterpret.
+    auto ds = IndividualToDroneStrategies(population[i]);
+    // Pack the request.
+    EvaluationRequest req;
+    for (int d = 0; d < problem_.nd(); d++) {
+      auto* strategies = req.add_drone_strategies();
+      for (int s : ds[d]) {
+        strategies->add_strategy(s);
+      }
+    }
+    // Send out the call.
+    pending_calls[i] = new PendingCall();
+    pending_calls[i]->idx = i;
+    pending_calls[i]->response_reader =
+        stub->PrepareAsyncEval(&pending_calls[i]->context, req, &cq);
+    pending_calls[i]->response_reader->StartCall();
+    pending_calls[i]->response_reader->Finish(
+        &pending_calls[i]->reply, &pending_calls[i]->status,
+        reinterpret_cast<void*>(pending_calls[i]));
+  };
 
   auto async_complete = [&]() {
     void* got_tag;
     bool ok;
     int total_completed = 0;
+    std::set<PendingCall*> to_delete;
     while (cq.Next(&got_tag, &ok)) {
-      int i = reinterpret_cast<intptr_t>(got_tag);
+      CHECK(got_tag != nullptr);
+      auto* pc = reinterpret_cast<PendingCall*>(got_tag);
+      int i = pc->idx;
       CHECK(ok);
-      CHECK(pending_calls[i].status.ok());
-      best = std::max(best, scores_out->at(i) = pending_calls[i].reply.score());
+
+      if (!pc->status.ok()) {
+        LOG(WARNING) << "Received status: " << pc->status.error_message()
+                     << "\n"
+                     << pc->status.error_details();
+        to_delete.insert(pc);
+        LOG(INFO) << "Resending in 2s.";
+        using namespace std::chrono_literals;
+        std::this_thread::sleep_for(2s);
+        send_request(i);
+        LOG(INFO) << "Sent.";
+        continue;
+      }
+
+      int curr_score = pc->reply.score();
+      scores_out->at(i) = curr_score;
+      if (curr_score > *best_score_out) {
+        *best_score_out = curr_score;
+        *best_individual_out = population[i];
+      }
       LOG(INFO) << absl::Substitute(
-          "Generation $0: eval $1 / $2. GOT: $3 BEST: $4", generation,
-          ++total_completed, total_evals, scores_out->at(i), best);
+          "Generation $0: eval $1 / $2 (idx $3). GOT: $4 BEST: $5", generation,
+          ++total_completed, total_evals, i, scores_out->at(i),
+          *best_score_out);
       if (total_completed == total_evals) break;
+    }
+    for (PendingCall* pc : to_delete) {
+      delete pc;
     }
   };
 
   auto reader_thread = std::thread(async_complete);
 
   for (int i = eval_from; i < population.size(); i++) {
-    // Reinterpret.
-    auto individual = IndividualToDroneStrategies(population[i]);
-    // Pack the request.
-    EvaluationRequest req;
-    for (int d = 0; d < problem_.nd(); d++) {
-      auto* strategies = req.add_drone_strategies();
-      for (int s : individual[d]) {
-        strategies->add_strategy(s);
-      }
-    }
-    // Send out the call.
-    pending_calls[i].response_reader =
-        stub->PrepareAsyncEval(&pending_calls[i].context, req, &cq);
-    pending_calls[i].response_reader->StartCall();
-    pending_calls[i].response_reader->Finish(
-        &pending_calls[i].reply, &pending_calls[i].status, (void*)i);
+    send_request(i);
   }
+
   reader_thread.join();
-  return best;
+
+  for (auto* pc : pending_calls) {
+    delete pc;
+  }
 }
 
-void GaSolver::RunEvaluator() {
+void GaSolver::RunEvaluator() const {
   using ga_solver::EvaluationRequest;
   using ga_solver::EvaluationResponse;
   using ga_solver::Evaluator;
@@ -1014,9 +1131,9 @@ void GaSolver::RunEvaluator() {
   struct PendingCall {
     enum CallStatus { CREATE, PROCESS, FINISH };
 
-    PendingCall(GaSolver* solver, Evaluator::AsyncService* service,
+    PendingCall(const GaSolver& solver, Evaluator::AsyncService* service,
                 ServerCompletionQueue* cq)
-        : solver(*solver),
+        : solver(solver),
           service(service),
           cq(cq),
           responder(&ctx),
@@ -1024,7 +1141,7 @@ void GaSolver::RunEvaluator() {
       Proceed();
     }
 
-    GaSolver& solver;
+    const GaSolver& solver;
     Evaluator::AsyncService* service;
     ServerCompletionQueue* cq;
     ServerContext ctx;
@@ -1034,7 +1151,7 @@ void GaSolver::RunEvaluator() {
     CallStatus status;
 
     void Proceed(int thread_id = -1) {
-      //LOG(INFO) << "Proceed " << thread_id << " st " << status << " this "
+      // LOG(INFO) << "Proceed " << thread_id << " st " << status << " this "
       //          << this;
       switch (status) {
         case CREATE: {
@@ -1043,16 +1160,17 @@ void GaSolver::RunEvaluator() {
           break;
         }
         case PROCESS: {
-          new PendingCall(&solver, service, cq);
+          new PendingCall(solver, service, cq);
 
           LOG(INFO) << thread_id << " : Got a request.";
 
-          Individual individual(solver.problem_.nd());
+          SolutionBuilder::DroneStrategies ds(solver.problem_.nd());
           for (int d = 0; d < solver.problem_.nd(); d++) {
             for (int s : req.drone_strategies(d).strategy()) {
-              individual[d].push_back(s);
+              ds[d].push_back(s);
             }
           }
+          auto individual = solver.DroneStrategiesToIndividual(ds);
           resp.set_score(solver.Eval(individual));
           responder.Finish(resp, Status::OK, this);
           status = FINISH;
@@ -1069,12 +1187,12 @@ void GaSolver::RunEvaluator() {
   };
 
   std::function<void(int)> work = [&](int thread_id) {
-    auto* dummy = new PendingCall(this, &service, cq.get());
+    auto* dummy = new PendingCall(*this, &service, cq.get());
     void* tag;
     bool ok;
     while (true) {
-      CHECK(cq->Next(&tag, &ok));
-      CHECK(ok);
+      CHECK(cq->Next(&tag, &ok)) << "Failed to get next!";
+      CHECK(ok) << "Not ok!";
       reinterpret_cast<PendingCall*>(tag)->Proceed(thread_id);
     }
   };
@@ -1089,7 +1207,7 @@ void GaSolver::RunEvaluator() {
   }
 }
 
-GaSolver::Individual GaSolver::RunGA() {
+std::pair<int, GaSolver::Individual> GaSolver::RunGA() const {
   CHECK(FLAGS_ga_population_size == FLAGS_ga_selection_size +
                                         FLAGS_ga_crossingover_size +
                                         FLAGS_ga_mutation_size);
@@ -1097,6 +1215,7 @@ GaSolver::Individual GaSolver::RunGA() {
   std::vector<Individual> population;
   std::vector<int> scores;
   int best_score = -1;
+  Individual best_individual;
   int eval_from = 0;
 
   // Generate the first population.
@@ -1199,23 +1318,30 @@ GaSolver::Individual GaSolver::RunGA() {
     // Eval.
     LOG(INFO) << "Evaluating...";
     if (FLAGS_ga_is_standalone) {
-      best_score = DoEvals(population, best_score, eval_from, gen, &scores);
+      if (FLAGS_ga_standalone_num_threads < 2) {
+        DoEvals(population, eval_from, gen, &scores, &best_score,
+                &best_individual);
+      } else {
+        DoParallelEvals(population, FLAGS_ga_standalone_num_threads, eval_from,
+                        gen, &scores, &best_score, &best_individual);
+      }
     } else {
       CHECK(FLAGS_ga_is_arbitrator) << "Can't be here!";
-      best_score =
-          DoRemoteEvals(population, best_score, eval_from, gen, &scores);
+      DoRemoteEvals(population, eval_from, gen, &scores, &best_score,
+                    &best_individual);
     }
   }
-  return population[std::find(scores.begin(), scores.end(), best_score) -
-                    scores.begin()];
+
+  return {best_score, best_individual};
 }
 
 std::unique_ptr<Solution> GaSolver::Solve() {
   if (FLAGS_ga_is_standalone || FLAGS_ga_is_arbitrator) {
-    auto best_individual = RunGA();
+    auto best = RunGA();
+    LOG(INFO) << "GA says: " << best.first;
     SolutionBuilder builder(*this);
-    builder.Build(IndividualToDroneStrategies(best_individual), true);
-    LOG(INFO) << "Should give: " << builder.score;
+    builder.Build(IndividualToDroneStrategies(best.second), true);
+    LOG(INFO) << "Re-eval says: " << builder.score;
     return std::move(builder.solution);
   } else {
     CHECK(FLAGS_ga_is_evaluator) << "Can't be here";

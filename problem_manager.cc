@@ -109,6 +109,9 @@ std::unique_ptr<Problem> ProblemManager::GenerateProblem(
       total_ordered_items += num_items;
       total_requested[product] += num_items;
       order_proto->add_request(num_items);
+      while (num_items--) {
+        order_proto->add_exact_product_order(product);
+      }
     }
   }
 
@@ -173,6 +176,7 @@ std::unique_ptr<Problem> ProblemManager::LoadFromProblemFile(
     for (int j = 0; j < x; j++) {
       int xx = get_int();
       (*order->mutable_request()->Mutable(xx))++;
+      order->add_exact_product_order(xx);
     }
   }
   fin.close();
@@ -213,10 +217,8 @@ bool ProblemManager::SaveToProblemFile(const Problem &problem,
         std::accumulate(order.request().begin(), order.request().end(), 0);
     fout << absl::Substitute("$0 $1\n$2\n", order.location().x(),
                              order.location().y(), num_items);
-    for (int product = 0; product < problem.np(); product++) {
-      for (int item = 0; item < order.request(product); item++) {
-        fout << product << " ";
-      }
+    for (int product : order.exact_product_order()) {
+      fout << product << " ";
     }
     fout << std::endl;
   }
@@ -307,12 +309,11 @@ ProblemType ProblemManager::DetermineProblemType(const Problem &problem) {
   return problem_type;
 }
 
-void ProblemManager::AddDistances(Problem* problem) {
+void ProblemManager::AddDistances(Problem *problem) {
   if (problem == nullptr) return;
   auto get_loc = [&](int idx) {
-    return idx < problem->nw()
-           ? problem->warehouse(idx).location()
-           : problem->order(idx - problem->nw()).location();
+    return idx < problem->nw() ? problem->warehouse(idx).location()
+                               : problem->order(idx - problem->nw()).location();
   };
   for (int src = 0; src < problem->nw() + problem->no(); src++) {
     problem->mutable_dist()->add_src();
@@ -324,7 +325,7 @@ void ProblemManager::AddDistances(Problem* problem) {
       int dist = ceil(sqrt(dx * dx + dy * dy));
       problem->mutable_dist()->mutable_src(src)->add_dst(dist);
     }
-  } 
+  }
 }
 
 }  // namespace drones

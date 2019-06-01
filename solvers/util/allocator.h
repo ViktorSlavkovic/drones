@@ -3,6 +3,7 @@
 
 #include <functional>
 #include <map>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -22,6 +23,16 @@ class Allocator {
   // be served from which warehouse.
   static Alloc AllocateWithDistFn(const Problem& problem,
                                   const DistFn& dist_fn);
+
+  // Load alloc from the specified path.
+  // Using OmogenHeap's matching file format.
+  static Alloc LoadFromFile(const Problem& problem,
+                            const std::string& alloc_file);
+
+  // Save alloc to the specified path.
+  // Using OmogenHeap's matching file format.
+  static void SaveToFile(Alloc alloc, const Problem& problem,
+                         const std::string& alloc_file);
 
   static bool VerifyAlloc(const Problem& problem, const Alloc& alloc);
 };

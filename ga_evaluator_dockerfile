@@ -5,5 +5,5 @@ WORKDIR /app
 COPY ./docker_data/* ./
 EXPOSE 12345/tcp
 
-ENTRYPOINT ["sh", "-c", "./main --problem_file=$PROBLEM_FILE --solver_type=ga --ga_is_standalone=false --ga_is_evaluator --ga_evaluator_service_address=0.0.0.0:12345" ]
+ENTRYPOINT ["sh", "-c", "./main --problem_file=$PROBLEM_FILE --ga_alloc_from_file=$ALLOC_FILE --solver_type=ga --ga_is_standalone=false --ga_is_evaluator --ga_evaluator_service_address=0.0.0.0:12345" ]
 

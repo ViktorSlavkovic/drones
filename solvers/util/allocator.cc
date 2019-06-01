@@ -1,5 +1,6 @@
 #include "solvers/util/allocator.h"
 
+#include <fstream>
 #include <map>
 #include <random>
 #include <utility>
@@ -18,6 +19,48 @@ using lp::Polynomial;
 using lp::SavyProtoHash;
 using operations_research::MPSolver;
 using operations_research::MPVariable;
+
+Allocator::Alloc Allocator::LoadFromFile(const Problem& problem,
+                                         const std::string& alloc_file) {
+  LOG(INFO) << "Loading alloc from: " << alloc_file;
+  Alloc res(problem.no());
+  std::ifstream fin(alloc_file);
+  CHECK(fin.good());
+  for (int o = 0; o < problem.no(); o++) {
+    for (int p : problem.order(o).exact_product_order()) {
+      int w;
+      fin >> w;
+      res[o][{w, p}]++;
+    }
+  }
+  fin.close();
+  CHECK(VerifyAlloc(problem, res)) << "Invalid alloc!";
+  return res;
+}
+
+void Allocator::SaveToFile(Alloc alloc, const Problem& problem,
+                           const std::string& alloc_file) {
+  LOG(INFO) << "Saving alloc to: " << alloc_file;
+  std::ofstream fout(alloc_file);
+  CHECK(fout.good());
+  for (int o = 0; o < problem.no(); o++) {
+    for (int p : problem.order(o).exact_product_order()) {
+      int w = -1;
+      for (auto& wp_i : alloc[o]) {
+        if (wp_i.first.second != p) continue;
+        if (wp_i.second > 0) {
+          w = wp_i.first.first;
+          wp_i.second--;
+          break;
+        }
+      }
+      CHECK(w >= 0);
+      fout << w << " ";
+    }
+    fout << "\n";
+  }
+  fout.close();
+}
 
 Allocator::Alloc Allocator::AllocateWithDistFn(const Problem& problem,
                                                const DistFn& dist_fn) {

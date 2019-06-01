@@ -5,6 +5,7 @@ echo Using PROJECT_ID: $PROJECT_ID
 mkdir docker_data
 cp bazel-bin/main docker_data/
 cp data/*.in docker_data/
+cp data/*.alloc docker_data/
 
 # Arbitrator image:
 echo Building ga_arbitrator-image

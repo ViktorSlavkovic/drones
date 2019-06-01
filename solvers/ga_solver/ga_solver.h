@@ -143,10 +143,10 @@ class GaSolver : public ProblemSolver {
     //    which you'll deliver fastest and deliver.
     //    Type: DELIVER
     bool Strategy2(int d);
-    // 3: Find the order which is closest to completion, move something closer
-    //    from. Choose src and dst warehouses so that dst is closer than src
-    //    and is in top kNumConsideredWarehouses (see the impl.) closest
-    //    warehouses to the order and so that overall moving time is minimized.
+    // 3: Find the order which is closest to completion, move something closer.
+    //    Choose src and dst warehouses so that dst is closer than src and is
+    //    in top kNumConsideredWarehouses (see the impl.) closest warehouses to
+    //    the order and so that overall moving time is minimized.
     //    Type: MOVE
     bool Strategy3(int d);
     // 4: Like 3, but take to the closest warehouse only.
@@ -188,10 +188,6 @@ class GaSolver : public ProblemSolver {
   const std::vector<std::function<bool(SolutionBuilder*, int)>> kStrategies;
   // The number of bits required to store an index of kStrategies.
   const int kLog2NumStrategies;
-  // Protects kAlloc.
-  std::mutex mux_kAlloc;
-  // Protects kProductWeights.
-  std::mutex mux_kProductWeights;
 
   // Calculates closest warehouses for each order (see kClosestWarehouses).
   static std::vector<std::vector<int>> CalcClosestWarehouses(
@@ -204,31 +200,46 @@ class GaSolver : public ProblemSolver {
   // Creates a vector of filtered-out (FLAGS_ga_forbidden_strategies)
   // strategies. Used to initialize kStrategies.
   static std::vector<std::function<bool(SolutionBuilder*, int)>>
-  FilterStrategies(GaSolver* ga_solver);
+  FilterStrategies();
 
+  // Protects kAlloc.
+  std::mutex mux_kAlloc;
+  // Protects kProductWeights.
+  std::mutex mux_kProductWeights;
   // Random engine used to generate all random numbers in this solver.
-  std::default_random_engine random_engine_;
+  mutable std::default_random_engine random_engine_;
 
   // Convert Individual to SolutionBuilder::DroneStrategies.
   SolutionBuilder::DroneStrategies IndividualToDroneStrategies(
-      const Individual& individual);
+      const Individual& individual) const;
+  // Convert SolutionBuilder::DroneStrategies to Individual.
+  Individual DroneStrategiesToIndividual(
+      const SolutionBuilder::DroneStrategies& drone_strategies) const;
   // Generates a single individual in the GA's population.
-  Individual GenerateIndividual();
+  Individual GenerateIndividual() const;
   // Do a single evaluation. This is thread-safe.
-  int Eval(const Individual& individual);
-  // Do all required evals in a single generation. Returns the best score.
+  int Eval(const Individual& individual) const;
+  // Do all required evals in a single generation.
   // This is the standalone version.
-  int DoEvals(const std::vector<Individual>& population, int preg_gen_best,
-              int eval_from, int generation, std::vector<int>* scores_out);
-  // Do all required evals in a single generation. Returns the best score.
+  void DoEvals(const std::vector<Individual>& population, int eval_from,
+               int generation, std::vector<int>* scores_out,
+               int* best_score_out, Individual* best_individual_out) const;
+  // Do all required evals in a single generation.
+  // This is the standalone multi-threaded version.
+  void DoParallelEvals(const std::vector<Individual>& population,
+                       int num_threads, int eval_from, int generation,
+                       std::vector<int>* scores_out, int* best_score_out,
+                       Individual* best_individual_out) const;
+  // Do all required evals in a single generation.
   // This is the arbitrator version.
-  int DoRemoteEvals(const std::vector<Individual>& population,
-                    int preg_gen_best, int eval_from, int generation,
-                    std::vector<int>* scores_out);
+  void DoRemoteEvals(const std::vector<Individual>& population, int eval_from,
+                     int generation, std::vector<int>* scores_out,
+                     int* best_score_out,
+                     Individual* best_individual_out) const;
   // Runs the Genetic Algorithm, and stores the best solution in solution_.
-  Individual RunGA();
+  std::pair<int, Individual> RunGA() const;
   // Acts as an evaluator.
-  void RunEvaluator();
+  void RunEvaluator() const;
 };
 }  // namespace drones
 

@@ -19,6 +19,7 @@ message Warehouse {
 message Order {
   optional Location location = 1;
   repeated int32 request = 2;
+  repeated int32 exact_product_order = 3;
 }
 
 message ProblemType {

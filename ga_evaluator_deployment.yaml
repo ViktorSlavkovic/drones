@@ -2,22 +2,23 @@
 apiVersion: "v1"
 kind: "ConfigMap"
 metadata:
-  name: "evaluator-app-config"
+  name: "evaluator-config"
   namespace: "default"
   labels:
     app: "evaluator-app"
 data:
   PROBLEM_FILE: "busy_day.in"
+  ALLOC_FILE: "busy_day.alloc"
 ---
 apiVersion: "extensions/v1beta1"
 kind: "Deployment"
 metadata:
-  name: "evaluator-app"
+  name: "evaluator-dep"
   namespace: "default"
   labels:
     app: "evaluator-app"
 spec:
-  replicas: 4
+  replicas: 22
   selector:
     matchLabels:
       app: "evaluator-app"
@@ -27,29 +28,40 @@ spec:
         app: "evaluator-app"
     spec:
       containers:
-      - name: "ga-evaluator-image-sha256"
+      - name: "ga-evaluator-image"
         image: "gcr.io/vs-gcp-drones/ga_evaluator-image:latest"
+        ports:
+        - containerPort: 12345
         env:
         - name: "PROBLEM_FILE"
           valueFrom:
             configMapKeyRef:
               key: "PROBLEM_FILE"
-              name: "evaluator-app-config"
+              name: "evaluator-config"
+        - name: "ALLOC_FILE"
+          valueFrom:
+            configMapKeyRef:
+              key: "ALLOC_FILE"
+              name: "evaluator-config"
+        resources:
+          requests: 
+            memory: "1500Mi"
+            cpu: "3500m"
 ---
 apiVersion: "autoscaling/v2beta1"
 kind: "HorizontalPodAutoscaler"
 metadata:
-  name: "evaluator-app-hpa"
+  name: "evaluator-hpa"
   namespace: "default"
   labels:
     app: "evaluator-app"
 spec:
   scaleTargetRef:
     kind: "Deployment"
-    name: "evaluator-app"
+    name: "evaluator-dep"
     apiVersion: "apps/v1beta1"
-  minReplicas: 1
-  maxReplicas: 5
+  minReplicas: 22
+  maxReplicas: 22 
   metrics:
   - type: "Resource"
     resource:
@@ -65,7 +77,8 @@ spec:
   selector:
     app: "evaluator-app"
   ports:
-  - protocol: TCP
+  - name: "grpc-evaluator"
+    #    protocol: TCP
     port: 12345
     targetPort: 12345
 
