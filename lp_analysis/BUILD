@@ -22,11 +22,22 @@ par_binary(
     ],
 )
 
+par_binary(
+    name = "order_completeness",
+    srcs = ["order_completeness.py"],
+    deps = [
+        requirement("absl-py"),
+        requirement("numpy"),
+        requirement("matplotlib"),
+    ],
+)
+
 cc_binary(
     name = "eval_main",
     srcs = ["eval_main.cc"],
     linkstatic = True,
     deps = [
+        "@com_google_absl//absl/strings",
         "@com_github_gflags_gflags//:gflags",
         "@com_github_glog_glog//:glog",
     ],
