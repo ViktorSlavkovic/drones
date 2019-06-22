@@ -13,50 +13,16 @@ std::unique_ptr<Solution> Sp1Solver::Solve() {
   auto* drone_commands = solution->add_drone_desc();
   std::vector<std::pair<int, int>> distances;
   for (int order = 0; order < problem_.no(); order++) {
-    int dx = problem_.order(order).location().x() -
-             problem_.warehouse(0).location().x();
-    int dy = problem_.order(order).location().y() -
-             problem_.warehouse(0).location().y();
-    int d = static_cast<int>(ceil(sqrt(dx * dx + dy * dy)));
-    distances.push_back({d, order});
+    distances.push_back(
+        {problem_.dist().src(0).dst(problem_.nw() + order), order});
   }
   std::sort(distances.begin(), distances.end());
-  // Add the initial LOAD command.
-  {
-    auto* cmd = drone_commands->add_drone_command();
-    cmd->set_type(DroneCommand_CommandType_LOAD);
-    cmd->set_drone(0);
-    cmd->set_warehouse(0);
-    cmd->set_product(0);
-    cmd->set_num_items(1);
-    cmd->set_start_time(1);
-  }
-  int curr_time = 2;
-  bool trimmed = false;
+  int curr_time = 0;
+  int prev_dist = 0;
   for (const auto& order : distances) {
-    // Add a DELIVER command.
-    {
-      int next_time = curr_time + order.first + 1;
-      if (next_time > problem_.t() + 1) {
-        trimmed = true;
-        break;
-      }
-      auto* cmd = drone_commands->add_drone_command();
-      cmd->set_type(DroneCommand_CommandType_DELIVER);
-      cmd->set_drone(0);
-      cmd->set_order(order.second);
-      cmd->set_product(0);
-      cmd->set_num_items(1);
-      cmd->set_start_time(curr_time);
-      curr_time = next_time;
-    }
+    if (curr_time + prev_dist + order.first + 2 > problem_.t() + 1) break;
     // Add a LOAD command.
     {
-      int next_time = curr_time + order.first + 1;
-      if (next_time > problem_.t() + 1) {
-        trimmed = true;
-        break;
-      }
       auto* cmd = drone_commands->add_drone_command();
       cmd->set_type(DroneCommand_CommandType_LOAD);
       cmd->set_drone(0);
@@ -64,12 +30,21 @@ std::unique_ptr<Solution> Sp1Solver::Solve() {
       cmd->set_product(0);
       cmd->set_num_items(1);
       cmd->set_start_time(curr_time);
-      curr_time = next_time;
+      curr_time += prev_dist + 1;
     }
-  }
-  // Remove the last LOAD since it might be invalid.
-  if (!trimmed) {
-    drone_commands->mutable_drone_command()->RemoveLast();
+    // Add a DELIVER command.
+    {
+      auto* cmd = drone_commands->add_drone_command();
+      cmd->set_type(DroneCommand_CommandType_DELIVER);
+      cmd->set_drone(0);
+      cmd->set_order(order.second);
+      cmd->set_product(0);
+      cmd->set_num_items(1);
+      cmd->set_start_time(curr_time);
+      curr_time += order.first + 1;
+    }
+
+    prev_dist = order.first;
   }
   return solution;
 }
