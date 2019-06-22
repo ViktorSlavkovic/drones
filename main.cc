@@ -48,7 +48,7 @@ DEFINE_bool(
     check, true,
     "If true, the solution will be checked - simulated, validated and scored.");
 DEFINE_bool(
-    inf_loop_end, true,
+    inf_loop_end, false,
     "If true, main() won't return. Instead, it will loop indefinitely.");
 
 std::unique_ptr<drones::Problem> get_problem() {
