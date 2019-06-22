@@ -14,12 +14,8 @@ std::unique_ptr<Solution> Sp2Solver::Solve() {
   std::vector<std::pair<int, int>> distances;
 
   for (int warehouse = 0; warehouse < problem_.nw(); warehouse++) {
-    int dx = problem_.order(0).location().x() -
-             problem_.warehouse(warehouse).location().x();
-    int dy = problem_.order(0).location().y() -
-             problem_.warehouse(warehouse).location().y();
-    int d = static_cast<int>(ceil(sqrt(dx * dx + dy * dy)));
-    distances.push_back({d, warehouse});
+    distances.push_back(
+        {problem_.dist().src(problem_.nw() + 0).dst(warehouse), warehouse});
   }
   int d0 = distances.front().first;
   std::sort(distances.begin(), distances.end());
