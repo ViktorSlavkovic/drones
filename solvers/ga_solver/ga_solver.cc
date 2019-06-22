@@ -41,12 +41,16 @@ DEFINE_int32(
     "How many individuals are kept from each generation's population "
     "in a selection. The sum: ga_selection_size + ga_crossing_over_size + "
     "ga_mutation_size should match ga_population_size.");
+DEFINE_bool(ga_same_twists, true,
+            "Whether should use the same twist points for all drones or not.");
 DEFINE_int32(ga_max_twists, 5,
              "Maximum number of crossings (twists) in a crossingover.");
 DEFINE_int32(ga_crossingover_size, 30,
              "How many individuals are added in the crossingover phase. Should "
              "be even!. The sum: ga_selection_size + ga_crossing_over_size + "
              "ga_mutation_size should match ga_population_size.");
+DEFINE_bool(ga_keep_both_children, true,
+            "Whether or not should keep both crossingover children.");
 DEFINE_double(ga_mutation_prob, 0.05,
               "The probability of a single bit flip in a mutation.");
 DEFINE_int32(ga_mutation_size, 20,
@@ -1287,8 +1291,9 @@ std::pair<int, GaSolver::Individual> GaSolver::RunGA() const {
           std::uniform_int_distribution<int> gen_idx(0, population.size() - 1);
           int a = gen_idx(random_engine_);
           int b;
-          while ((b = gen_idx(random_engine_)) == a) {}
-          
+          while ((b = gen_idx(random_engine_)) == a) {
+          }
+
           int kick = scores[a] < scores[b] ? a : b;
           LOG(INFO) << absl::Substitute("$0 <- $1", kick,
                                         population.size() - 1);
@@ -1303,9 +1308,13 @@ std::pair<int, GaSolver::Individual> GaSolver::RunGA() const {
       LOG(INFO) << "Crossingover...";
       {
         std::uniform_int_distribution<int> gen_idx(0, population.size() - 1);
-        CHECK(FLAGS_ga_crossingover_size % 2 == 0)
-            << "ga_crossingover_size not even!";
-        int to_add = FLAGS_ga_crossingover_size / 2;
+        int to_add = FLAGS_ga_crossingover_size;
+        if (FLAGS_ga_keep_both_children) {
+          CHECK(FLAGS_ga_crossingover_size % 2 == 0)
+              << "ga_crossingover_size not even!";
+          to_add /= 2;
+        }
+        LOG(INFO) << "to_add=" << to_add;
         while (to_add--) {
           int num_twists = std::uniform_int_distribution<int>(
               1, FLAGS_ga_max_twists)(random_engine_);
@@ -1318,7 +1327,8 @@ std::pair<int, GaSolver::Individual> GaSolver::RunGA() const {
 
           int a = gen_idx(random_engine_);
           int b;
-          while ((b = gen_idx(random_engine_)) == a) {}
+          while ((b = gen_idx(random_engine_)) == a) {
+          }
 
           Individual child1(problem_.nd());
           Individual child2(problem_.nd());
@@ -1334,11 +1344,22 @@ std::pair<int, GaSolver::Individual> GaSolver::RunGA() const {
               child1[d].push_back(population[a][d][bit]);
               child2[d].push_back(population[b][d][bit]);
             }
+            if (!FLAGS_ga_same_twists) {
+              num_twists = std::uniform_int_distribution<int>(
+                  1, FLAGS_ga_max_twists)(random_engine_);
+              twists.clear();
+              for (int t = 0; t < num_twists; t++) {
+                twists.push_back(gen_twist(random_engine_));
+              }
+              std::sort(twists.begin(), twists.end());
+            }
           }
           population.push_back(child1);
           scores.push_back(-1);
-          population.push_back(child2);
-          scores.push_back(-1);
+          if (FLAGS_ga_keep_both_children) {
+            population.push_back(child2);
+            scores.push_back(-1);
+          }
         }
       }
       // Mutation.
