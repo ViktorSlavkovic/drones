@@ -17,10 +17,10 @@ std::unique_ptr<Solution> Sp1Solver::Solve() {
         {problem_.dist().src(0).dst(problem_.nw() + order), order});
   }
   std::sort(distances.begin(), distances.end());
-  int curr_time = 0;
+  int curr_time = 1;
   int prev_dist = 0;
   for (const auto& order : distances) {
-    if (curr_time + prev_dist + order.first + 2 > problem_.t() + 1) break;
+    if (curr_time + prev_dist + order.first + 1 > problem_.t()) break;
     // Add a LOAD command.
     {
       auto* cmd = drone_commands->add_drone_command();
