@@ -13,6 +13,7 @@ git_repository(
     # branch="master",
     #commit="c4aaa4321d270d5d1a32ed8948ef565dca2ee3ff",
     commit = "39f44709bba203f5ff3bc18fab8098739f189a6d",
+    #commit = "f3fd201e68cf75b7720ff5c3cadc599a1d02b54b",
 )
 
 git_repository(
@@ -25,7 +26,8 @@ git_repository(
     name = "com_google_absl",
     remote = "https://github.com/abseil/abseil-cpp.git",
     #    commit = "7c7754fb3ed9ffb57d35fe8658f3ba4d73a31e72",
-    commit = "a02f62f456f2c4a7ecf2be3104fe0c6e16fbad9a",
+    #commit = "a02f62f456f2c4a7ecf2be3104fe0c6e16fbad9a",
+    commit = "e9324d926a9189e222741fce6e676f0944661a72",
 )
 
 git_repository(
@@ -76,9 +78,44 @@ git_repository(
 
 http_archive(
     name = "glpk",
-    url = "http://ftp.gnu.org/gnu/glpk/glpk-4.52.tar.gz",
-    sha256 = "9a5dab356268b4f177c33e00ddf8164496dc2434e83bd1114147024df983a3bb",
-    build_file = "//bazel:glpk.BUILD",
+    url = "http://ftp.gnu.org/gnu/glpk/glpk-4.65.tar.gz",
+    sha256 = "4281e29b628864dfe48d393a7bedd781e5b475387c20d8b0158f329994721a10",
+    build_file_content = """
+cc_library(
+    name = "glpk",
+    srcs = glob([
+        "glpk-4.65/src/*.c",
+        "glpk-4.65/src/*/*.c",
+        "glpk-4.65/src/*.h",
+        "glpk-4.65/src/*/*.h",
+    ], exclude = ["glpk-4.65/src/proxy/main.c"]),
+    hdrs = [
+        "glpk-4.65/src/glpk.h",
+    ],
+    copts = [
+        "-Wno-error",
+        "-w",
+        "-Iexternal/glpk/glpk-4.65/src",
+        "-Iexternal/glpk/glpk-4.65/src/amd",
+        "-Iexternal/glpk/glpk-4.65/src/api",
+        "-Iexternal/glpk/glpk-4.65/src/bflib",
+        "-Iexternal/glpk/glpk-4.65/src/cglib",
+        "-Iexternal/glpk/glpk-4.65/src/colamd",
+        "-Iexternal/glpk/glpk-4.65/src/draft",
+        "-Iexternal/glpk/glpk-4.65/src/env",
+        "-Iexternal/glpk/glpk-4.65/src/minisat",
+        "-Iexternal/glpk/glpk-4.65/src/misc",
+        "-Iexternal/glpk/glpk-4.65/src/mpl",
+        "-Iexternal/glpk/glpk-4.65/src/npp",
+        "-Iexternal/glpk/glpk-4.65/src/proxy",
+        "-Iexternal/glpk/glpk-4.65/src/simplex",
+        "-Iexternal/glpk/glpk-4.65/src/zlib",
+        "-DHAVE_ZLIB",
+    ],
+    includes=["glpk-4.65/src"],
+    visibility = ["//visibility:public"],
+)
+    """,
 )
 
 http_archive(

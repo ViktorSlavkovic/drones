@@ -1,6 +1,13 @@
 build --copt="--std=c++17"
 build --copt="-O3"
 build --copt="-DNDEBUG"
+build --copt="-DUSE_GLPK"
+build --define USE_GLPK=
+run --copt="--std=c++17"
+run --copt="-O3"
+run --copt="-DNDEBUG"
+run --copt="-DUSE_GLPK"
+run --define USE_GLPK=
 test --copt="--std=c++17"
 test --copt="-O3"
 test --test_output=all

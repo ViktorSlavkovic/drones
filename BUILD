@@ -1,8 +1,24 @@
 package(default_visibility = ["//visibility:public"])
 
 sh_binary(
+    name = "sp5_main",
+    srcs = ["sp5_main.sh"],
+    deps = [
+        ":run_util",
+    ],
+)
+
+sh_binary(
     name = "sp4_main",
     srcs = ["sp4_main.sh"],
+    deps = [
+        ":run_util",
+    ],
+)
+
+sh_binary(
+    name = "sp3_main",
+    srcs = ["sp3_main.sh"],
     deps = [
         ":run_util",
     ],
@@ -45,6 +61,7 @@ cc_binary(
         ":solution_manager",
         "//solvers:problem_solver_factory",
         "//solvers/upper_bound",
+        "//solvers/upper_bound_higher",
         "@com_github_gflags_gflags//:gflags",
         "@com_github_glog_glog//:glog",
         "@com_google_absl//absl/strings",

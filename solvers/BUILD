@@ -14,7 +14,9 @@ cc_library(
         "//solvers/random_solver",
         "//solvers/sp1_solver",
         "//solvers/sp2_solver",
+        "//solvers/sp3_solver",
         "//solvers/sp4_solver",
+        "//solvers/sp5_solver",
         "@com_github_glog_glog//:glog",
     ],
 )

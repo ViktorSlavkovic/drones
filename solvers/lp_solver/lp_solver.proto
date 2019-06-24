@@ -4,18 +4,18 @@ package drones.lp_solver;
 
 message VariableDesc {
   enum VariableType {
-    TOTAL_SCORE = 0;         // Double
-    ORDER_SCORE = 1;         // Double
-    ORDER_COMPLETENESS = 2;  // Double
-    ORDER_STATE = 3;         // Int
-    DRONE_STATE = 4;         // Int
-    DRONE_LOC = 5;           // Bool
-    WAREHOUSE_STATE = 6;     // Int
+    TOTAL_SCORE = 0;         // Double  args: none
+    ORDER_SCORE = 1;         // Double  args: o
+    ORDER_COMPLETENESS = 2;  // Double  args: o, t
+    ORDER_STATE = 3;         // Int     args: o, p, t
+    DRONE_STATE = 4;         // Int     args: d, p, t
+    DRONE_LOC = 5;           // Bool    args: d, l, t
+    WAREHOUSE_STATE = 6;     // Int     args: w, p, t
 
-    WAIT = 7;      // Bool
-    LOAD = 8;      // Bool
-    UNLOAD = 9;    // Bool
-    DELIVER = 10;  // Bool
+    WAIT = 7;      // Bool  args: d, l, t
+    LOAD = 8;      // Bool  args: d, w, p, n, l, t
+    UNLOAD = 9;    // Bool  args: d, w, p, n, l, t
+    DELIVER = 10;  // Bool  args: d, o, p, n, l, t
   }
   optional VariableType type = 1;
   optional int32 drone = 2;

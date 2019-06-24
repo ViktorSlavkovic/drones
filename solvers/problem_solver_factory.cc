@@ -7,7 +7,9 @@
 #include "solvers/random_solver/random_solver.h"
 #include "solvers/sp1_solver/sp1_solver.h"
 #include "solvers/sp2_solver/sp2_solver.h"
+#include "solvers/sp3_solver/sp3_solver.h"
 #include "solvers/sp4_solver/sp4_solver.h"
+#include "solvers/sp5_solver/sp5_solver.h"
 #include "solvers/ga_solver/ga_solver.h"
 
 namespace drones {
@@ -23,8 +25,12 @@ std::unique_ptr<ProblemSolver> ProblemSolverFactory::CreateSolver(
     solver = std::make_unique<Sp1Solver>(problem);
   } else if (solver_type == "sp2") {
     solver = std::make_unique<Sp2Solver>(problem);
+  } else if (solver_type == "sp3") {
+    solver = std::make_unique<Sp3Solver>(problem);
   } else if (solver_type == "sp4") {
     solver = std::make_unique<Sp4Solver>(problem);
+  } else if (solver_type == "sp5") {
+    solver = std::make_unique<Sp5Solver>(problem);
   } else if (solver_type == "ecf") {
     solver = std::make_unique<EcfSolver>(problem);
   } else if (solver_type == "cwf") {

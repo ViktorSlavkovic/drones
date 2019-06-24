@@ -31,6 +31,9 @@ DEFINE_int32(
 DEFINE_int32(
     gen_max_M, 500,
     "Max drone capacity. Hashcode says 10^4, but they give up to 200.");
+DEFINE_int32(
+    gen_max_t, 1000000,
+    "Max simulation time. Hashcode says (and gives) 10^6.");
 
 namespace drones {
 
@@ -62,7 +65,7 @@ std::unique_ptr<Problem> ProblemManager::GenerateProblem(
     }
   };
 
-  problem->set_t(otgen(1, 1000000));
+  problem->set_t(otgen(1, FLAGS_gen_max_t));
   problem->set_nd(problem_type.nd_1() ? 1 : otgen(1, FLAGS_gen_max_nd));
   problem->set_nw(problem_type.nw_1() ? 1 : otgen(1, FLAGS_gen_max_nw));
   problem->set_np(problem_type.np_1() ? 1 : otgen(1, FLAGS_gen_max_np));
