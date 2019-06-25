@@ -117,7 +117,7 @@ void Sp5Solver::CheckAuxVar(const drones::lp_solver::VariableDesc& var,
       CHECK(!var.has_location()) << msg;
       CHECK(var.has_t()) << msg;
       CHECK(var.t() >= 1) << msg;
-      CHECK(var.t() <= problem_.t()) << msg;
+      CHECK(var.t() <= simulation_time_) << msg;
       CHECK(!var.has_warehouse()) << msg;
       CHECK(!var.has_product()) << msg;
       CHECK(var.has_order()) << msg;
@@ -131,7 +131,7 @@ void Sp5Solver::CheckAuxVar(const drones::lp_solver::VariableDesc& var,
       CHECK(!var.has_location()) << msg;
       CHECK(var.has_t()) << msg;
       CHECK(var.t() >= 0) << msg;
-      CHECK(var.t() <= problem_.t()) << msg;
+      CHECK(var.t() <= simulation_time_) << msg;
       CHECK(!var.has_warehouse()) << msg;
       CHECK(var.has_product()) << msg;
       CHECK(var.product() >= 0) << msg;
@@ -149,7 +149,7 @@ void Sp5Solver::CheckAuxVar(const drones::lp_solver::VariableDesc& var,
       CHECK(!var.has_location()) << msg;
       CHECK(var.has_t()) << msg;
       CHECK(var.t() >= 0) << msg;
-      CHECK(var.t() <= problem_.t()) << msg;
+      CHECK(var.t() <= simulation_time_) << msg;
       CHECK(!var.has_warehouse()) << msg;
       CHECK(var.has_product()) << msg;
       CHECK(var.product() >= 0) << msg;
@@ -167,7 +167,7 @@ void Sp5Solver::CheckAuxVar(const drones::lp_solver::VariableDesc& var,
       CHECK(var.location() < problem_.nw() + problem_.no()) << msg;
       CHECK(var.has_t()) << msg;
       CHECK(var.t() >= 1) << msg;
-      CHECK(var.t() <= problem_.t()) << msg;
+      CHECK(var.t() <= simulation_time_) << msg;
       CHECK(!var.has_warehouse()) << msg;
       CHECK(!var.has_product()) << msg;
       CHECK(!var.has_order()) << msg;
@@ -179,7 +179,7 @@ void Sp5Solver::CheckAuxVar(const drones::lp_solver::VariableDesc& var,
       CHECK(!var.has_location()) << msg;
       CHECK(var.has_t()) << msg;
       CHECK(var.t() >= 0) << msg;
-      CHECK(var.t() <= problem_.t()) << msg;
+      CHECK(var.t() <= simulation_time_) << msg;
       CHECK(var.has_warehouse()) << msg;
       CHECK(var.warehouse() >= 0) << msg;
       CHECK(var.warehouse() < problem_.nw()) << msg;
@@ -201,7 +201,7 @@ void Sp5Solver::CheckOptVar(const drones::lp_solver::VariableDesc& var,
       absl::Substitute("\nwhere: $0\nvar:\n$1", where, var.DebugString());
   CHECK(var.has_t()) << msg;
   CHECK(var.t() >= 1) << msg;
-  CHECK(var.t() <= problem_.t()) << msg;
+  CHECK(var.t() <= simulation_time_) << msg;
   CHECK(var.has_drone()) << msg;
   CHECK(var.drone() >= 0) << msg;
   CHECK(var.drone() < problem_.nd()) << msg;
@@ -221,8 +221,10 @@ void Sp5Solver::CheckOptVar(const drones::lp_solver::VariableDesc& var,
       CHECK(var.product() < problem_.np()) << msg;
       CHECK(var.has_num_items()) << msg;
       CHECK(var.num_items() >= 1) << msg;
-      int finish_time = var.t() + problem_.dist().src(var.location()).dst(var.warehouse());
-      CHECK(finish_time <= problem_.t()) << msg << absl::Substitute("\nfinish_time: $0", finish_time);
+      int finish_time =
+          var.t() + problem_.dist().src(var.location()).dst(var.warehouse());
+      CHECK(finish_time <= simulation_time_)
+          << msg << absl::Substitute("\nfinish_time: $0", finish_time);
       break;
     }
     case lp_solver::VariableDesc_VariableType_DELIVER: {
@@ -235,8 +237,11 @@ void Sp5Solver::CheckOptVar(const drones::lp_solver::VariableDesc& var,
       CHECK(var.product() < problem_.np()) << msg;
       CHECK(var.has_num_items()) << msg;
       CHECK(var.num_items() >= 1) << msg;
-      int finish_time = var.t() + problem_.dist().src(var.location()).dst(problem_.nw() + var.order());
-      CHECK(finish_time <= problem_.t()) << msg << absl::Substitute("\nfinish_time: $0", finish_time);
+      int finish_time =
+          var.t() +
+          problem_.dist().src(var.location()).dst(problem_.nw() + var.order());
+      CHECK(finish_time <= simulation_time_)
+          << msg << absl::Substitute("\nfinish_time: $0", finish_time);
       break;
     }
     case lp_solver::VariableDesc_VariableType_WAIT:
@@ -471,10 +476,11 @@ util::lp::Polynomial Sp5Solver::Compute(
         // This is essentially the available state at this step minus what's
         // being taken in this step - so UNLOAD should be endning in the
         // previous step and LOAD should be ending in this step.
-        
+
         // Handle LOADs.
         dep_var.set_type(lp_solver::VariableDesc_VariableType_LOAD);
-        int start_time = var.t() - problem_.dist().src(loc).dst(var.warehouse());
+        int start_time =
+            var.t() - problem_.dist().src(loc).dst(var.warehouse());
         if (start_time >= 1) {
           dep_var.set_t(start_time);
           for (int d = 0; d < problem_.nd(); d++) {
@@ -489,7 +495,8 @@ util::lp::Polynomial Sp5Solver::Compute(
 
         // Handle UNLOADs.
         dep_var.set_type(lp_solver::VariableDesc_VariableType_UNLOAD);
-        start_time = var.t() - problem_.dist().src(loc).dst(var.warehouse()) - 1;
+        start_time =
+            var.t() - problem_.dist().src(loc).dst(var.warehouse()) - 1;
         if (start_time >= 1) {
           dep_var.set_t(start_time);
           for (int d = 0; d < problem_.nd(); d++) {
@@ -518,7 +525,8 @@ std::unique_ptr<Solution> Sp5Solver::Solve() {
   var_desc.set_type(lp_solver::VariableDesc_VariableType_TOTAL_SCORE);
   LOG(INFO) << "Computing the cost functioni...";
   auto cost_fn = Compute(var_desc);
-  LOG(INFO) << absl::Substitute("$0 entries in the CACHE", aux_var_cache_.size());
+  LOG(INFO) << absl::Substitute("$0 entries in the CACHE",
+                                aux_var_cache_.size());
   LOG(INFO) << absl::Substitute("Cost function depnds on $0 decision vars.",
                                 cost_fn.coef.size());
   var_desc.Clear();
@@ -589,7 +597,7 @@ std::unique_ptr<Solution> Sp5Solver::Solve() {
       }
     }
   }
-  var_desc.Clear(); 
+  var_desc.Clear();
   check_opt_vars("(1)");
 
   // (2) 0 <= DRONE_STATE <= MAX_WEIGHT
@@ -680,7 +688,7 @@ std::unique_ptr<Solution> Sp5Solver::Solve() {
           // unload - drone_loc <= 0;
           for (int w = 0; w < problem_.nw(); w++) {
             int finish_time = t + problem_.dist().src(loc).dst(w);
-            if (finish_time > problem_.t()) continue;
+            if (finish_time > simulation_time_) continue;
             var_desc.set_warehouse(w);
             int max_n = problem_.m() / problem_.product(p).m();
             for (int n = 1; n <= max_n; n++) {
@@ -717,11 +725,10 @@ std::unique_ptr<Solution> Sp5Solver::Solve() {
           for (int o = 0; o < problem_.no(); o++) {
             int finish_time =
                 t + problem_.dist().src(loc).dst(problem_.nw() + o);
-            if (finish_time > problem_.t()) continue;
+            if (finish_time > simulation_time_) continue;
             var_desc.set_order(o);
-            int max_n =
-                std::min(problem_.order(o).request(p),
-                         problem_.m() / problem_.product(p).m());
+            int max_n = std::min(problem_.order(o).request(p),
+                                 problem_.m() / problem_.product(p).m());
             for (int n = 1; n <= max_n; n++) {
               var_desc.set_num_items(n);
 
@@ -768,10 +775,9 @@ std::unique_ptr<Solution> Sp5Solver::Solve() {
           var_desc.set_warehouse(w);
           int dt = problem_.dist().src(loc).dst(w);
           int min_start_time = std::max(t - dt, 1);
-          for (int start_time = min_start_time; start_time <= t;
-               start_time++) {
+          for (int start_time = min_start_time; start_time <= t; start_time++) {
             int finish_time = start_time + dt;
-            if (finish_time > problem_.t()) break;
+            if (finish_time > simulation_time_) break;
             var_desc.set_t(start_time);
             for (int p = 0; p < problem_.np(); p++) {
               var_desc.set_product(p);
@@ -800,13 +806,12 @@ std::unique_ptr<Solution> Sp5Solver::Solve() {
           for (int start_time = std::max(t - dt, 1); start_time <= t;
                start_time++) {
             int finish_time = start_time + dt;
-            if (finish_time > problem_.t()) break;
+            if (finish_time > simulation_time_) break;
             var_desc.set_t(start_time);
             for (int p = 0; p < problem_.np(); p++) {
               var_desc.set_product(p);
-              int max_n =
-                  std::min(problem_.m() / problem_.product(p).m(),
-                           problem_.order(o).request(p));
+              int max_n = std::min(problem_.m() / problem_.product(p).m(),
+                                   problem_.order(o).request(p));
               for (int n = 1; n <= max_n; n++) {
                 var_desc.set_num_items(n);
 
