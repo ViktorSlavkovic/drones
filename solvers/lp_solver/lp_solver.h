@@ -35,6 +35,13 @@ class LpSolver : public ProblemSolver {
   // Cache initial (at the simulation start, t = 0) values of the auxiliary
   // variables.
   void CacheInitial();
+  // Check the validity of an auxiliary variable. Basically a CHECK pack, dies
+  // if invalid.
+  void CheckAuxVar(const drones::lp_solver::VariableDesc& var,
+                   const std::string& where) const;
+  // Same for the main optimization vars.
+  void CheckOptVar(const drones::lp_solver::VariableDesc& var,
+                   const std::string& where) const;
   // Computes the the auxiliary variables as decision variables polynomials.
   util::lp::Polynomial Compute(const drones::lp_solver::VariableDesc& var);
 };
