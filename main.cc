@@ -41,13 +41,16 @@ DEFINE_bool(
     "If true and gen_problem is true, the program will exit without attempting "
     "to solve it. Use this to generate problem only.");
 DEFINE_string(
-    gen_problem_type, "{}",
+    gen_problem_type, "",
     "Type of the problem being generated (ProblemType proto) as a text proto.");
 DEFINE_string(solver_type, "random",
               "The solver type (see ProblemSolverFactory).");
 DEFINE_bool(
     check, true,
     "If true, the solution will be checked - simulated, validated and scored.");
+DEFINE_bool(check_ub, false,
+            "If true, the upper bound will be calculated and quality will be "
+            "assessed. Only relevant if check is set.");
 DEFINE_bool(
     inf_loop_end, false,
     "If true, main() won't return. Instead, it will loop indefinitely.");
@@ -114,11 +117,13 @@ int main(int argc, char* argv[]) {
     CHECK(drones::SolutionManager::Simulate(*solution, &score))
         << "Invalid solution!";
     std::cout << "TOTAL SCORE: " << score << std::endl;
-    LOG(INFO) << "Calculating the upper bound estimate...";
-    int upper_bound = drones::UpperBoundHigher(*problem).Calc();
-    LOG(INFO) << absl::Substitute(
-        "\nTotal Score: $0\nUpper Bound: $1\nQuality: $2 %", score, upper_bound,
-        100.0 * score / upper_bound);
+    if (FLAGS_check_ub) {
+      LOG(INFO) << "Calculating the upper bound estimate...";
+      int upper_bound = drones::UpperBoundHigher(*problem).Calc();
+      LOG(INFO) << absl::Substitute(
+          "\nTotal Score: $0\nUpper Bound: $1\nQuality: $2 %", score,
+          upper_bound, 100.0 * score / upper_bound);
+    }
   }
 
   if (!FLAGS_read_solution && !FLAGS_solution_file.empty()) {
