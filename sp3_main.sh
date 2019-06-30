@@ -2,7 +2,7 @@
 
 source run_util.sh
 
-SP3_PROBLEM_TYPE_TEXT_PROTO=$'Nd_1:true,M_m:true,Nw_1:true,S0_inf:false,Np_1:true'  
+SP3_PROBLEM_TYPE_TEXT_PROTO=$'Nd_1:true,M_m:true,Nw_1:true,S0_inf:true,Np_1:true'
 PROBLEM_FILE="/tmp/test_problem_file"
 SOLUTION_FILE="/tmp/test_solution_file"
 
