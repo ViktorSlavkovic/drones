@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <map>
 #include <numeric>
 #include <random>
@@ -20,9 +21,10 @@ DEFINE_bool(cwf_alloc_use_cw_o, false,
             "Wheter or not to consider distance from the closest warehouse to "
             "the order when comparing with the case when the order location "
             "itself is closer.");
-DEFINE_int32(cwf_alloc_iter, 1, "Number of iterations in IterativeAlloc.");
+DEFINE_int32(cwf_alloc_iter, 100, "Number of iterations in IterativeAlloc.");
 DEFINE_int32(cwf_perm_iter, 100,
              "Number of order permutation improvement iterations.");
+DEFINE_int32(cwf_alloc_training_mode, 0, "0: C; 1: 2-C; 2: 1/C; 3: 1+C");
 
 namespace drones {
 
@@ -44,11 +46,7 @@ void CwfSolver::CalcClosestWarehouses() {
     int best_w = -1;
     double min_dist = std::numeric_limits<double>::max();
     for (int w = 0; w < problem_.nw(); w++) {
-      double dx = problem_.order(o).location().x() -
-                  problem_.warehouse(w).location().x();
-      double dy = problem_.order(o).location().y() -
-                  problem_.warehouse(w).location().y();
-      double dist = dx * dx + dy * dy;
+      double dist = problem_.dist().src(w).dst(problem_.nw() + o);
       if (dist < min_dist) {
         min_dist = dist;
         best_w = w;
@@ -206,28 +204,14 @@ std::vector<int> CwfSolver::GenerateOrderPermutation() const {
 void CwfSolver::IterativeAlloc(int num_iter) {
   CHECK(num_iter > 0);
 
-  util::Allocator::DistFn dist_fn = [&](int o, int w, int p) {
+  auto dist_fn = [&](int o, int w, int p, bool training) {
     double c_o = 1.0;
-    double dx_o =
-        problem_.warehouse(w).location().x() - problem_.order(o).location().x();
-    double dy_o =
-        problem_.warehouse(w).location().y() - problem_.order(o).location().y();
-    double d_o = ceil(sqrt(dx_o * dx_o + dy_o * dy_o)) + 1;
-
+    double d_o = problem_.dist().src(w).dst(problem_.nw() + o) + 1;
     double c_w = 1.0;
-    double dx_w = problem_.warehouse(w).location().x() -
-                  problem_.warehouse(closest_w_.at(o)).location().x();
-    double dy_w = problem_.warehouse(w).location().y() -
-                  problem_.warehouse(closest_w_.at(o)).location().y();
-    double d_w = ceil(sqrt(dx_w * dx_w + dy_w * dy_w)) + 1;
-
+    double d_w = problem_.dist().src(w).dst(closest_w_.at(o)) + 1;
     double c_cwo = 1.0;
-    double dx_cwo = problem_.warehouse(closest_w_.at(o)).location().x() -
-                    problem_.order(o).location().x();
-    double dy_cwo = problem_.warehouse(closest_w_.at(o)).location().y() -
-                    problem_.order(o).location().y();
-    double d_cwo = ceil(sqrt(dx_cwo * dx_cwo + dy_cwo * dy_cwo));
-
+    double d_cwo =
+        problem_.dist().src(closest_w_.at(o)).dst(problem_.nw() + o) + 1;
     if (!order_feedback_.empty()) {
       CHECK(order_feedback_[o].w_o[w].first != 0);
       CHECK(order_feedback_[o].w_cw[w].first != 0);
@@ -239,16 +223,50 @@ void CwfSolver::IterativeAlloc(int num_iter) {
       c_cwo = static_cast<double>(order_feedback_[o].cw_o.second) /
               order_feedback_[o].cw_o.first;
     }
-    double d = (w = closest_w_.at(o))
-                   ? d_cwo * c_cwo
-                   : std::min(d_o * c_o, d_w * c_w + d_cwo * c_cwo);
-    return FLAGS_cwf_alloc_use_cw_o ? d : std::min(d_o * c_o, d_w * c_w);
+    if (training) {
+      switch (FLAGS_cwf_alloc_training_mode) {
+        case 0:
+          break;
+        case 1: {
+          c_o = 2.0 - c_o;
+          c_w = 2.0 - c_w;
+          c_cwo = 2.0 - c_cwo;
+          break;
+        }
+        case 2: {
+          c_o = 1.0 / c_o;
+          c_w = 1.0 / c_w;
+          c_cwo = 1.0 / c_cwo;
+          break;
+        }
+        case 3: {
+          c_o = 1.0 + c_o;
+          c_w = 1.0 + c_w;
+          c_cwo = 1.0 + c_cwo;
+          break;
+        }
+        default:
+          CHECK(false) << "Invalid training mode: "
+                       << FLAGS_cwf_alloc_training_mode;
+      }
+    }
+    double d_not_cw = FLAGS_cwf_alloc_use_cw_o
+                          ? std::min(d_o * c_o, d_w * c_w + d_cwo * c_cwo)
+                          : std::min(d_o * c_o, d_w * c_w);
+    double d = (w == closest_w_.at(o)) ? d_cwo * c_cwo : d_not_cw;
+    return d;
   };
+
+  using namespace std::placeholders;
+  util::Allocator::DistFn t_dist_fn = std::bind(dist_fn, _1, _2, _3, true);
+  util::Allocator::DistFn nt_dist_fn = std::bind(dist_fn, _1, _2, _3, false);
 
   for (int iter = 1; iter <= num_iter; iter++) {
     LOG_EVERY_N(INFO, num_iter / 10) << absl::Substitute(
         "<><><><><><> IterativeAlloc:: Iter $0 / $1\n", iter, num_iter);
-    alloc_ = util::Allocator::AllocateWithDistFn(problem_, dist_fn);
+    alloc_ = iter == num_iter
+                 ? util::Allocator::AllocateWithDistFn(problem_, nt_dist_fn)
+                 : util::Allocator::AllocateWithDistFn(problem_, t_dist_fn);
     CHECK(util::Allocator::VerifyAlloc(problem_, alloc_)) << "Invalid alloc!";
     GenerateOrderPermutation();
   }
