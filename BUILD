@@ -1,5 +1,33 @@
 package(default_visibility = ["//visibility:public"])
 
+load("@subpar//:subpar.bzl", "par_binary")
+load(
+    "@io_bazel_rules_python//python:python.bzl",
+    "py_binary",
+    "py_library",
+    "py_test",
+)
+load("@external_python_deps//:requirements.bzl", "requirement")
+
+par_binary(
+  name = "batch_runner",
+  srcs = ["batch_runner.py"],
+  data = [":main"],
+  deps = [
+    requirement("absl-py"),
+    requirement("numpy"),
+  ],
+)
+
+par_binary(
+  name = "batch_stats",
+  srcs = ["batch_stats.py"],
+  deps = [
+    requirement("absl-py"),
+    requirement("numpy"),
+  ],
+)
+
 sh_binary(
     name = "sp5_main",
     srcs = ["sp5_main.sh"],
@@ -47,6 +75,21 @@ sh_library(
         ":main",
         "//checker:main",
         "//visual:visualize_solution",
+    ],
+)
+
+cc_binary(
+    name = "generator",
+    srcs = ["generator.cc"],
+    linkstatic = True,
+    deps = [
+        ":problem_cc_proto",
+        ":problem_manager",
+        "//solvers/upper_bound_higher",
+        "@com_github_gflags_gflags//:gflags",
+        "@com_github_glog_glog//:glog",
+        "@com_google_absl//absl/strings",
+        "@com_google_protobuf_cc//:protobuf",
     ],
 )
 
