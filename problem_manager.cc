@@ -19,21 +19,27 @@ DEFINE_int32(gen_max_coord, 10000, "Max coordinate value. Don't go over 10^4.");
 DEFINE_int32(
     gen_max_nd, 100,
     "Max number of drones. Hashcode says 10^3, but they give up to 30.");
+DEFINE_int32(gen_min_nd, 1, "Min number of drones. Should be <= gen_max_nd.");
 DEFINE_int32(
     gen_max_nw, 100,
     "Max number of warehouses. Hashcode says 10^4, but they give up to 16.");
+DEFINE_int32(gen_min_nw, 1, "Min number of warehouses. Should be <= gen_max_nw.");
 DEFINE_int32(
     gen_max_np, 400,
     "Max number of products. Hashcode says 10^4, but they give up to 400.");
+DEFINE_int32(gen_min_np, 1, "Min number of products. Should be <= gen_max_np.");
 DEFINE_int32(
     gen_max_no, 2000,
     "Max number of products. Hashcode says 10^4, but they give less than 5K.");
+DEFINE_int32(gen_min_no, 1, "Min number of orders. Should be <= gen_max_no.");
 DEFINE_int32(
     gen_max_M, 500,
     "Max drone capacity. Hashcode says 10^4, but they give up to 200.");
+DEFINE_int32(gen_min_M, 1, "Min drone capacity. Should be <= gen_max_M.");
 DEFINE_int32(
     gen_max_t, 1000000,
     "Max simulation time. Hashcode says (and gives) 10^6.");
+DEFINE_int32(gen_min_t, 1, "Min simulation time. Should be <= gen_max_t.");
 
 namespace drones {
 
@@ -65,12 +71,12 @@ std::unique_ptr<Problem> ProblemManager::GenerateProblem(
     }
   };
 
-  problem->set_t(otgen(1, FLAGS_gen_max_t));
-  problem->set_nd(problem_type.nd_1() ? 1 : otgen(1, FLAGS_gen_max_nd));
-  problem->set_nw(problem_type.nw_1() ? 1 : otgen(1, FLAGS_gen_max_nw));
-  problem->set_np(problem_type.np_1() ? 1 : otgen(1, FLAGS_gen_max_np));
-  problem->set_no(problem_type.no_1() ? 1 : otgen(1, FLAGS_gen_max_no));
-  problem->set_m(problem_type.m_m() ? 1 : otgen(1, FLAGS_gen_max_M));
+  problem->set_t(otgen(FLAGS_gen_min_t, FLAGS_gen_max_t));
+  problem->set_nd(problem_type.nd_1() ? 1 : otgen(FLAGS_gen_min_nd, FLAGS_gen_max_nd));
+  problem->set_nw(problem_type.nw_1() ? 1 : otgen(FLAGS_gen_min_nw, FLAGS_gen_max_nw));
+  problem->set_np(problem_type.np_1() ? 1 : otgen(FLAGS_gen_min_np, FLAGS_gen_max_np));
+  problem->set_no(problem_type.no_1() ? 1 : otgen(FLAGS_gen_min_no, FLAGS_gen_max_no));
+  problem->set_m(problem_type.m_m() ? 1 : otgen(FLAGS_gen_min_M, FLAGS_gen_max_M));
 
   for (int product = 0; product < problem->np(); product++) {
     problem->add_product()->set_m(problem_type.m_m() ? 1
