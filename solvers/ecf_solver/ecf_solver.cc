@@ -15,10 +15,10 @@
 #include "solvers/util/allocator.h"
 #include "solvers/util/load_splitter.h"
 
-DEFINE_int32(ecf_split_iter, 10,
+DEFINE_int32(ecf_split_iter, 1,
              "Number of split iterations, 1 is essential an it's without a "
              "feedback in alloc.");
-DEFINE_int32(ecf_perm_iter, 100,
+DEFINE_int32(ecf_perm_iter, 0,
              "Number of order permutation improvement iterations.");
 DEFINE_string(ecf_save_initial_alloc, "",
               "If not empty, the initial alloc will be saved to this path.");
@@ -26,6 +26,9 @@ DEFINE_string(ecf_save_final_alloc, "",
               "If not empty, the final alloc will be saved to this path.");
 DEFINE_string(ecf_load_alloc, "",
               "If not empty, the initial alloc will be loaded from this path.");
+DEFINE_int32(ecf_max_extras, 1, "Maximum number of extra orders added/glued.");
+DEFINE_int32(ecf_max_extra_attempts, 1,
+             "Maximum number of attempts to add add/glue an extra order.");
 
 namespace drones {
 
@@ -167,13 +170,13 @@ std::vector<int> EcfSolver::GenereteOrderPermutation(
       mwy += wy / order_splits[o].size();
       double dx = ox - wx;
       double dy = oy - wy;
-      completion_time += (2.0 - 1.0 / order_splits[o].size()) *
-                         w_split.second.total_times *
-                         (ceil(sqrt(dx * dx + dy * dy)) + 1);
+      completion_time +=
+          (2.0 * w_split.second.total_times - 1.0 / order_splits[o].size()) *
+          ceil(sqrt(dx * dx + dy * dy));
     }
     double dx = mpox - mwx;
     double dy = mpoy - mwy;
-    completion_time += ceil(sqrt(dx * dx + dy * dy)) + 1;
+    completion_time += ceil(sqrt(dx * dx + dy * dy));
     order_durations.push_back({completion_time, o});
   }
   std::sort(order_durations.begin(), order_durations.end());
@@ -234,7 +237,7 @@ std::unique_ptr<Solution> EcfSolver::PackSolution(
     };
 
     int total_pending_items = calc_total_pending_items();
-    CHECK(total_pending_items > 0);
+    // CHECK(total_pending_items > 0);
     LOG_IF(INFO, enable_log)
         << absl::Substitute("Initial pending items: $0", total_pending_items);
     // +1 is to make sure the check at the loop beginning is valid in the first
@@ -314,6 +317,103 @@ std::unique_ptr<Solution> EcfSolver::PackSolution(
 
       auto load = order_splits[o][best_w].repeated_splits.front().single_split;
 
+      // Let's GLUE.
+      std::vector<int> extra_orders = {o};
+      std::map<int, int> total_load = load;
+      std::vector<std::map<int, int>> extra_what = {load};
+      if (order_splits[o][best_w].total_num_items ==
+          order_splits[o][best_w].repeated_splits.front().num_items) {
+        // This is the last one.
+        std::set<int> taken_products;
+        int total_weight = 0;
+        for (const auto& p_n : load) {
+          total_weight += problem_.product(p_n.first).m() * p_n.second;
+          taken_products.insert(p_n.first);
+        }
+        int cap = problem_.m() - total_weight;
+
+        int dur = 2 * taken_products.size();
+        {
+          int dx = drone_location[best_d].x() -
+                   problem_.warehouse(best_w).location().x();
+          int dy = drone_location[best_d].y() -
+                   problem_.warehouse(best_w).location().y();
+          dur += ceil(sqrt(dx * dx + dy * dy));
+          dx = problem_.order(o).location().x() -
+               problem_.warehouse(best_w).location().x();
+          dy = problem_.order(o).location().y() -
+               problem_.warehouse(best_w).location().y();
+          dur += ceil(sqrt(dx * dx + dy * dy));
+        }
+
+        // Needed for LoadSplitter::Split.
+        std::map<int, int> product_weights;
+        for (int p = 0; p < problem_.np(); p++) {
+          product_weights[p] = problem_.product(p).m();
+        }
+
+        int prev_o = o;
+        int num_extra_attempts = 0;
+        int num_extras = 0;
+        bool was = false;
+        for (int extra_o : order_permutation) {
+          if (extra_o == o) {
+            was = true;
+            continue;
+          }
+          if (!was) continue;
+          if (num_extras >= FLAGS_ecf_max_extras) break;
+          if (num_extra_attempts >= FLAGS_ecf_max_extra_attempts) break;
+          num_extra_attempts++;
+
+          std::map<int, int> all_it_needs;
+          if (order_splits[extra_o].count(best_w) == 0) continue;
+          if (order_splits[extra_o][best_w].total_num_items == 0) continue;
+          for (const auto& rs : order_splits[extra_o][best_w].repeated_splits) {
+            for (const auto& p_n : rs.single_split) {
+              all_it_needs[p_n.first] += p_n.second * rs.times;
+            }
+          }
+          auto rsplit =
+              util::LoadSplitter::SplitOnce(all_it_needs, product_weights, cap);
+          if (rsplit.single_split.empty()) continue;
+
+          int extra_dur = problem_.dist()
+                              .src(problem_.nw() + prev_o)
+                              .dst(problem_.nw() + extra_o) +
+                          rsplit.single_split.size();
+          int extra_w = 0;
+          for (const auto& p_n : rsplit.single_split) {
+            if (taken_products.count(p_n.first) == 0) {
+              taken_products.insert(p_n.first);
+              extra_dur++;
+            }
+            extra_w += problem_.product(p_n.first).m() * p_n.second;
+          }
+          if (drone_busy_until[best_d] + dur + extra_dur > problem_.t())
+            continue;
+
+          // staje...
+          dur += extra_dur;
+          cap -= extra_w;
+          extra_orders.push_back(extra_o);
+          extra_what.push_back(rsplit.single_split);
+          for (const auto& p_n : rsplit.single_split) {
+            total_load[p_n.first] += p_n.second;
+            if ((all_it_needs[p_n.first] -= p_n.second) == 0) {
+              all_it_needs.erase(p_n.first);
+            }
+          }
+          order_splits[extra_o][best_w] = util::LoadSplitter::Split(
+              all_it_needs, product_weights, problem_.m());
+          if (order_splits[extra_o][best_w].total_times == 0) {
+            order_splits[extra_o].erase(best_w);
+          }
+          prev_o = extra_o;
+          num_extras++;
+        }
+      }
+
       // Let's generate the LOAD commands.
       {
         int dx = drone_location[best_d].x() -
@@ -321,7 +421,7 @@ std::unique_ptr<Solution> EcfSolver::PackSolution(
         int dy = drone_location[best_d].y() -
                  problem_.warehouse(best_w).location().y();
         int dist = ceil(sqrt(dx * dx + dy * dy));
-        for (const auto& pi : load) {
+        for (const auto& pi : total_load) {
           if (pi.second < 1) continue;
           num_drone_commands[best_d]++;
           auto* cmd = solution->mutable_drone_desc(best_d)->add_drone_command();
@@ -332,6 +432,7 @@ std::unique_ptr<Solution> EcfSolver::PackSolution(
           cmd->set_num_items(pi.second);
           cmd->set_start_time(drone_busy_until[best_d] + 1);
           drone_busy_until[best_d] += dist + 1;
+          drone_location[best_d] = problem_.warehouse(best_w).location();
           if (drone_busy_until[best_d] > problem_.t()) {
             LOG(INFO) << "    Exceeded!";
             should_roll_back = true;
@@ -344,39 +445,52 @@ std::unique_ptr<Solution> EcfSolver::PackSolution(
       if (should_roll_back) break;
 
       // Let's generate the DELIVER commands.
-      {
-        int dx = problem_.order(o).location().x() -
-                 problem_.warehouse(best_w).location().x();
-        int dy = problem_.order(o).location().y() -
-                 problem_.warehouse(best_w).location().y();
-        int dist = ceil(sqrt(dx * dx + dy * dy));
-        for (const auto& pi : load) {
-          if (pi.second < 1) continue;
-          num_drone_commands[best_d]++;
-          auto* cmd = solution->mutable_drone_desc(best_d)->add_drone_command();
-          cmd->set_drone(best_d);
-          cmd->set_type(DroneCommand_CommandType_DELIVER);
-          cmd->set_order(o);
-          cmd->set_product(pi.first);
-          cmd->set_num_items(pi.second);
-          cmd->set_start_time(drone_busy_until[best_d] + 1);
-          drone_busy_until[best_d] += dist + 1;
-          max_drone_busy_until =
-              std::max(drone_busy_until[best_d], max_drone_busy_until);
-          if (drone_busy_until[best_d] > problem_.t()) {
-            LOG(INFO) << "    Exceeded!";
-            should_roll_back = true;
-            break;
+      for (int i = 0; i < extra_orders.size(); i++) {  //
+        int o = extra_orders[i];                       //
+        auto& load = extra_what[i];                    //
+        bool should_break = false;                     //
+        {
+          int dx =
+              problem_.order(o).location().x() - drone_location[best_d].x();
+          int dy =
+              problem_.order(o).location().y() - drone_location[best_d].y();
+          int dist = ceil(sqrt(dx * dx + dy * dy));
+          for (const auto& pi : load) {
+            if (pi.second < 1) continue;
+            num_drone_commands[best_d]++;
+            auto* cmd =
+                solution->mutable_drone_desc(best_d)->add_drone_command();
+            cmd->set_drone(best_d);
+            cmd->set_type(DroneCommand_CommandType_DELIVER);
+            cmd->set_order(o);
+            cmd->set_product(pi.first);
+            cmd->set_num_items(pi.second);
+            cmd->set_start_time(drone_busy_until[best_d] + 1);
+            drone_busy_until[best_d] += dist + 1;
+            drone_location[best_d] = problem_.order(o).location();
+            max_drone_busy_until =
+                std::max(drone_busy_until[best_d], max_drone_busy_until);
+            if (drone_busy_until[best_d] > problem_.t()) {
+              LOG(INFO) << "    Exceeded!";
+              should_roll_back =
+                  true;  // ako je fejlovao, to je zbog orgiginalnog, ostale sam
+                         // proveravao, tako da je ok
+              should_break = true;
+              break;
+            }
+            dist = 0;
           }
-          dist = 0;
         }
+        if (should_break) break;
       }
 
       if (should_roll_back) break;
 
       // We haven't rolled-back yet, which doesn't mean we won't roll-back later
       // in this order. Still, we have some backed-up/irrelevant updates to do.
-      drone_location[best_d] = problem_.order(o).location();
+
+      // no updates here anymore...
+
       // We don't care if order_splits[o] is dirty if we roll back later in
       // this order, since we're going to the next order.
       order_splits[o][best_w].total_times--;
