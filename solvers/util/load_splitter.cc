@@ -86,6 +86,46 @@ LoadSplitter::RepeatedSplit LoadSplitter::SplitOnce(
           .single_split = knapsack_taken[total_volume]};
 }
 
+LoadSplitter::RepeatedSplit LoadSplitter::GreedySplitOnce(
+    const std::map<int, int>& stock, const std::map<int, int>& volumes,
+    int total_volume) {
+  std::map<int, int> taken;
+  int total_items = 0;
+
+  // [m(p)][p][n]
+  std::map<int, std::map<int, int>, std::greater<int>> sorted;
+  for (const auto& p_n : stock) {
+    sorted[volumes.at(p_n.first)].insert(p_n);
+  }
+  for (const auto& m_pn : sorted) {
+    int m = m_pn.first;
+    bool done = false;
+    for (const auto& p_n : m_pn.second) {
+      int p = p_n.first;
+      int n = p_n.second;
+      int taking = std::min(n, total_volume / m);
+      total_volume -= m * taking;
+      total_items += taking;
+      if (taking == 0) {
+        done = true;
+        break;
+      }
+      taken[p] += taking;
+    }
+    if (done) break;
+  }
+
+  // Calculate how many times we can do the same.
+  int num_times = std::numeric_limits<int>::max();
+  for (const auto& pi : taken) {
+    int max_times = stock.at(pi.first) / pi.second;
+    num_times = std::min(num_times, max_times);
+  }
+  CHECK(num_times > 0);
+
+  return {.num_items = total_items, .times = num_times, .single_split = taken};
+}
+
 LoadSplitter::CompleteSplit LoadSplitter::Split(
     std::map<int, int> stock, const std::map<int, int>& volumes,
     int total_volume) {

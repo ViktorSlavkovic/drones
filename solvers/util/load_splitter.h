@@ -34,6 +34,10 @@ class LoadSplitter {
                                  const std::map<int, int>& volumes,
                                  int total_volume);
 
+  static RepeatedSplit GreedySplitOnce(const std::map<int, int>& stock,
+                                       const std::map<int, int>& volumes,
+                                       int total_volume);
+
   // Split one (warehouse) stock to multiple drone turns.
   // No assumptions are made about whether the stock is "compact" (see
   // SplitOnce) or not. Returned split is compact (all repeated splits have
