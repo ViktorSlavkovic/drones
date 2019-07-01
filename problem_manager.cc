@@ -40,6 +40,7 @@ DEFINE_int32(
     gen_max_t, 1000000,
     "Max simulation time. Hashcode says (and gives) 10^6.");
 DEFINE_int32(gen_min_t, 1, "Min simulation time. Should be <= gen_max_t.");
+DEFINE_int32(gen_max_ppw, 1000, "Max items of a single product per warehouse.");
 
 namespace drones {
 
@@ -89,11 +90,18 @@ std::unique_ptr<Problem> ProblemManager::GenerateProblem(
   for (int warehouse = 0; warehouse < problem->nw(); warehouse++) {
     auto *warehouse_proto = problem->add_warehouse();
     *warehouse_proto->mutable_location() = loc_gen();
+    int total_items=0;
     for (int product = 0; product < problem->np(); product++) {
       int num_items = problem_type.s0_inf() ? std::numeric_limits<int>::max()
-                                            : otgen(0, 10000);
+                                            : otgen(0, FLAGS_gen_max_ppw);
       total_available[product] += num_items;
+      total_items += num_items;
       warehouse_proto->add_stock(num_items);
+    }
+    if (total_items == 0) {
+      int p = otgen(0, problem->np() - 1);
+      warehouse_proto->set_stock(p, 1);
+      total_available[p] += 1;
     }
   }
 
