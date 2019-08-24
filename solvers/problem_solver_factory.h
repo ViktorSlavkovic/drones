@@ -11,7 +11,20 @@ namespace drones {
 class ProblemSolverFactory {
  public:
   // Supported solver types:
-  //    - lp: Uses Google's GLOP, a linear programming solver.
+  //    - sp1:    Subproblem 1 optimal solver.
+  //    - sp2:    Subproblem 2 optimal solver.
+  //    - sp3:    Subproblem 3 solver (with or without TSP).
+  //    - sp4:    Subproblem 4 solver with allocation.
+  //    - sp5:    Subproblem 5 optimal but super slow ILP solver. Uses GLPK
+  //              behind the OR-Tools solver frontend.
+  //    - lp:     Linearizing the problem, uses GLPK behind the OR-Tools solver
+  //              frontend.
+  //    - random: A totally random solver.
+  //    - ga:     Genetic algorithm solver with strategies. Can be used as a
+  //              random solver with strategies by setting # of generations to
+  //              one.
+  //    - cwf:    Closest warehouse  first.
+  //    - ecf:    Earliest completion first(ish).
   static std::unique_ptr<ProblemSolver> CreateSolver(
       const Problem& problem, const std::string& solver_type);
 };
