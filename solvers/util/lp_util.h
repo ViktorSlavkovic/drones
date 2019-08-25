@@ -10,21 +10,21 @@ namespace drones {
 namespace util {
 namespace lp {
 
-// Polynomial consisting of the decision variables.
-struct Polynomial {
+// Linear combination of the decision variables.
+struct LinComb {
   // Maps decision variable name (hash) to it's coefficient. "const" is used
   // as a key for the constant factor.
   std::unordered_map<std::string, double> coef;
 
   // Overloading basic operators for the Polynomial type.
-  Polynomial& operator*=(double rhs) {
+  LinComb& operator*=(double rhs) {
     for (auto& p : coef) {
       p.second *= rhs;
     }
     return *this;
   }
 
-  Polynomial& operator+=(const Polynomial& rhs) {
+  LinComb& operator+=(const LinComb& rhs) {
     for (const auto& p : rhs.coef) {
       coef[p.first] += p.second;
     }

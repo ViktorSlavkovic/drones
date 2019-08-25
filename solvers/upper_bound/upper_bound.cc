@@ -11,19 +11,12 @@
 #include "glog/logging.h"
 #include "solvers/util/load_splitter.h"
 
-#include "ortools/constraint_solver/routing.h"
-#include "ortools/constraint_solver/routing_enums.pb.h"
-#include "ortools/constraint_solver/routing_index_manager.h"
-#include "ortools/constraint_solver/routing_parameters.h"
+DEFINE_bool(
+    ub_ultimate_closest, false,
+    "If true, it will be assumed that for each order everything is delivered "
+    "from it's closest location (either order or warehouse).");
 
 namespace drones {
-
-using operations_research::Assignment;
-using operations_research::DefaultRoutingSearchParameters;
-using operations_research::FirstSolutionStrategy;
-using operations_research::RoutingIndexManager;
-using operations_research::RoutingModel;
-using operations_research::RoutingSearchParameters;
 
 int UpperBound::Calc() {
   if (upper_bound_ >= 0) {
@@ -45,14 +38,30 @@ int UpperBound::Calc() {
     closest_wh.push_back(cw);
   }
 
+  // Find the closest order (other than itself) for each order.
+  // -1 means that it's the only one.
+  std::vector<int> closest_order;
+  for (int o = 0; o < problem_.no(); o++) {
+    int co = -1;
+    int cod = std::numeric_limits<int>::max();
+    for (int o1 = 0; o1 < problem_.no(); o1++) {
+      if (o1 == o) continue;
+      int o1d = problem_.dist().src(problem_.nw() + o1).dst(problem_.nw() + o);
+      if (co == -1 || o1d < cod) {
+        co = o1;
+        cod = o1d;
+      }
+    }
+    closest_order.push_back(co);
+  }
+
   // Prepare product weights map for the splitting.
   std::map<int, int> prod_weights;
   for (int p = 0; p < problem_.np(); p++) {
     prod_weights[p] = problem_.product(p).m();
   }
 
-  // Split each order into turns.
-  std::vector<util::LoadSplitter::CompleteSplit> order_splits;
+  // Get the order durations.
   std::vector<int> order_durations;
   std::map<int, int> order_request;
   for (int o = 0; o < problem_.no(); o++) {
@@ -66,100 +75,32 @@ int UpperBound::Calc() {
     auto split =
         util::LoadSplitter::Split(order_request, prod_weights, problem_.m());
 
-    int dur = 0;
-    bool first = true;
-    for (const auto& repeated_split : split.repeated_splits) {
-      int load_unload_times = 2 * repeated_split.times;
-      int travel_times = load_unload_times;
-      // We don't count the first travel time since we don't know where it will
-      // be from, we'll add that in distance matrix.
-      if (first) {
-        travel_times--;
-        first = false;
-      }
-      dur += repeated_split.single_split.size() * load_unload_times;
-      dur += problem_.dist().src(closest_wh[o]).dst(problem_.nw() + o) *
-             travel_times;
+    // We'll assume that everything is being delivered from the closest
+    // warehouse and that flying to the closest warehouse took no time.
+    // Also, we'll ignore the 1 tick per LOAD/UNLOAD/DELIVER to actually
+    // load/unload the goods.
+    int dur = (2 * split.total_times - 1) *
+              problem_.dist().src(closest_wh[o]).dst(problem_.nw() + o);
+    if (FLAGS_ub_ultimate_closest && closest_order[o] > -1 &&
+        problem_.dist()
+                .src(problem_.nw() + closest_order[o])
+                .dst(problem_.nw() + o) <
+            problem_.dist().src(closest_wh[o]).dst(problem_.nw() + o)) {
+      dur = (2 * split.total_times - 1) *
+            problem_.dist()
+                .src(problem_.nw() + closest_order[o])
+                .dst(problem_.nw() + o);
     }
     order_durations.push_back(dur);
-    order_splits.push_back(split);
   }
-
-  // [0, No - 1] - pairs (closest_wh[o], o) as our fictive graph's nodes.
-  //               Distances between nodes are calculated as order to warehouse
-  //               distances.
-  // [No, No]    - starting point (warehouse 0), dist from any node to here is
-  //               0 and dist from here to any node is warehouse 0 to node's
-  //               warehouse distance.
-  // Node visiting time is added to all distances: time needed to perform all
-  // Load and Deliver commands.
-  std::vector<std::vector<int>> distances(problem_.no() + 1);
-  for (int i = 0; i < problem_.no(); i++) {
-    for (int j = 0; j < problem_.no(); j++) {
-      if (i == j) {
-        distances[i].push_back(0);  // Irrelevant.
-      } else {
-        distances[i].push_back(
-            problem_.dist().src(problem_.nw() + i).dst(closest_wh[j]) +
-            order_durations[j]);
-      }
-    }
-    distances[i].push_back(0);
-  }
-  for (int j = 0; j < problem_.no(); j++) {
-    distances[problem_.no()].push_back(
-        problem_.dist().src(0).dst(closest_wh[j]) + order_durations[j]);
-  }
-  distances[problem_.no()].push_back(0);
-
-  // Solve the TSP and get the path:
-  std::vector<int> order_perm;
-  {
-    // (1 / 5) Create the model object.
-    RoutingIndexManager manager(
-        problem_.no() + 1 /* number of nodes */, 1 /* number of vehicles */,
-        RoutingIndexManager::NodeIndex{problem_.no()} /* depot index */);
-    RoutingModel model(manager);
-
-    // (2 / 5) Define cost of each arc.
-    const int transit_callback_index = model.RegisterTransitCallback(
-        [&distances, &manager](int64_t from_index,
-                               int64_t to_index) -> int64_t {
-          // Convert from routing variable Index to distance matrix NodeIndex.
-          auto from_node = manager.IndexToNode(from_index).value();
-          auto to_node = manager.IndexToNode(to_index).value();
-          return distances[from_node][to_node];
-        });
-    model.SetArcCostEvaluatorOfAllVehicles(transit_callback_index);
-
-    // (3 / 5) Set first solution heuristic.
-    RoutingSearchParameters search_params = DefaultRoutingSearchParameters();
-    search_params.set_first_solution_strategy(
-        FirstSolutionStrategy::PATH_CHEAPEST_ARC);
-
-    // (4 / 5) Solve the problem.
-    const Assignment* solution = model.SolveWithParameters(search_params);
-
-    // (5 / 5) Print the solution.
-    int64 index = model.Start(0 /* vehicle idx */);
-    // Skip the first node (depot).
-    index = solution->Value(model.NextVar(index));
-    while (model.IsEnd(index) == false) {
-      order_perm.push_back(manager.IndexToNode(index).value());
-      index = solution->Value(model.NextVar(index));
-    }
-    CHECK(order_perm.size() == problem_.no());
-  }
+  std::sort(order_durations.begin(), order_durations.end());
 
   double finish_time = 0;
-  int prev_o = problem_.no();
-  for (int o : order_perm) {
-    finish_time += static_cast<double>(distances[prev_o][o]) / problem_.nd();
-    prev_o = o;
-    upper_bound_ +=
-        static_cast<int>(100.0 * (problem_.t() - finish_time) / problem_.t());
+  for (int dir : order_durations) {
+    finish_time += static_cast<double>(dir) / problem_.nd();
+    if (finish_time > problem_.t() - 1) break;
+    upper_bound_ += ceil(100.0 * (problem_.t() - finish_time) / problem_.t());
   }
-
   return upper_bound_;
 }
 

@@ -21,7 +21,7 @@ class Sp5Solver : public ProblemSolver {
 
  private:
   // Cache of auxiliary variable computations.
-  using Cache = std::unordered_map<std::string, util::lp::Polynomial>;
+  using Cache = std::unordered_map<std::string, util::lp::LinComb>;
 
   // The cache object.
   Cache aux_var_cache_;
@@ -40,8 +40,9 @@ class Sp5Solver : public ProblemSolver {
   void CheckOptVar(const drones::lp_solver::VariableDesc& var,
                    const std::string& where) const;
 
-  // Computes the the auxiliary variables as decision variables polynomials.
-  util::lp::Polynomial Compute(const drones::lp_solver::VariableDesc& var);
+  // Computes the the auxiliary variables as decision variables linear
+  // combinations.
+  util::lp::LinComb Compute(const drones::lp_solver::VariableDesc& var);
 };
 
 }  // namespace drones

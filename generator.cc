@@ -4,7 +4,7 @@
 #include "google/protobuf/text_format.h"
 #include "problem.pb.h"
 #include "problem_manager.h"
-#include "solvers/upper_bound_higher/upper_bound_higher.h"
+#include "solvers/upper_bound/upper_bound.h"
 
 #include <algorithm>
 #include <fstream>
@@ -56,7 +56,7 @@ int main(int argc, char* argv[]) {
                                   problem->no(), problem->t(),
                                   problem->problem_type().DebugString());
     LOG(INFO) << "Calculating upper bound...";
-    int ub = drones::UpperBoundHigher(*problem).Calc();
+    int ub = drones::UpperBound(*problem).Calc();
     if (ub < 1) continue;
     std::string file = absl::Substitute(FLAGS_problem_file_pattern, tc);
     fout << absl::Substitute("$0 $1 $2 $3 $4 $5 $6 $7\n", file, problem->nd(),

@@ -85,7 +85,7 @@ cc_binary(
     deps = [
         ":problem_cc_proto",
         ":problem_manager",
-        "//solvers/upper_bound_higher",
+        "//solvers/upper_bound",
         "@com_github_gflags_gflags//:gflags",
         "@com_github_glog_glog//:glog",
         "@com_google_absl//absl/strings",
@@ -104,7 +104,6 @@ cc_binary(
         ":solution_manager",
         "//solvers:problem_solver_factory",
         "//solvers/upper_bound",
-        "//solvers/upper_bound_higher",
         "@com_github_gflags_gflags//:gflags",
         "@com_github_glog_glog//:glog",
         "@com_google_absl//absl/strings",

@@ -15,7 +15,7 @@
 namespace drones {
 namespace util {
 
-using lp::Polynomial;
+using lp::LinComb;
 using lp::SavyProtoHash;
 using operations_research::MPSolver;
 using operations_research::MPVariable;

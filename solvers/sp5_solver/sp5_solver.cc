@@ -255,7 +255,7 @@ void Sp5Solver::CheckOptVar(const drones::lp_solver::VariableDesc& var,
   }
 }
 
-util::lp::Polynomial Sp5Solver::Compute(
+util::lp::LinComb Sp5Solver::Compute(
     const drones::lp_solver::VariableDesc& var) {
   // Check the var validity.
   CheckAuxVar(var, "COMPUTE ENTRANCE");
@@ -267,7 +267,7 @@ util::lp::Polynomial Sp5Solver::Compute(
   }
 
   // Handle different variable types.
-  util::lp::Polynomial res;
+  util::lp::LinComb res;
   drones::lp_solver::VariableDesc dep_var;
   switch (var.type()) {
     case lp_solver::VariableDesc_VariableType_TOTAL_SCORE: {
@@ -311,7 +311,7 @@ util::lp::Polynomial Sp5Solver::Compute(
       res += Compute(dep_var);
       dep_var.Clear();
 
-      util::lp::Polynomial delivery;
+      util::lp::LinComb delivery;
       dep_var.set_type(lp_solver::VariableDesc_VariableType_DELIVER);
       dep_var.set_product(var.product());
       dep_var.set_order(var.order());
@@ -347,7 +347,7 @@ util::lp::Polynomial Sp5Solver::Compute(
       res += Compute(dep_var);
       dep_var.Clear();
 
-      util::lp::Polynomial traffic;
+      util::lp::LinComb traffic;
       dep_var.set_drone(var.drone());
       dep_var.set_product(var.product());
 
@@ -466,7 +466,7 @@ util::lp::Polynomial Sp5Solver::Compute(
       res += Compute(dep_var);
       dep_var.Clear();
 
-      util::lp::Polynomial traffic;
+      util::lp::LinComb traffic;
       dep_var.set_warehouse(var.warehouse());
       dep_var.set_product(var.product());
 
@@ -607,7 +607,7 @@ std::unique_ptr<Solution> Sp5Solver::Solve() {
     var_desc.set_drone(d);
     for (int t = 1; t <= simulation_time_; t++) {
       var_desc.set_t(t);
-      util::lp::Polynomial drone_total;
+      util::lp::LinComb drone_total;
       for (int p = 0; p < problem_.np(); p++) {
         var_desc.set_product(p);
 
@@ -664,10 +664,10 @@ std::unique_ptr<Solution> Sp5Solver::Solve() {
         var_desc.set_location(loc);
 
         var_desc.set_type(lp_solver::VariableDesc_VariableType_DRONE_LOC);
-        util::lp::Polynomial minus_drone_loc = Compute(var_desc);
+        util::lp::LinComb minus_drone_loc = Compute(var_desc);
         minus_drone_loc *= -1.0;
 
-        util::lp::Polynomial poly;
+        util::lp::LinComb poly;
 
         // wait - drone_loc <= 0;
         var_desc.set_type(lp_solver::VariableDesc_VariableType_WAIT);

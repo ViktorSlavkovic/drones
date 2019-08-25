@@ -10,7 +10,6 @@
 #include "solution_manager.h"
 #include "solvers/problem_solver_factory.h"
 #include "solvers/upper_bound/upper_bound.h"
-#include "solvers/upper_bound_higher/upper_bound_higher.h"
 
 #include <iostream>
 #include <memory>
@@ -119,7 +118,7 @@ int main(int argc, char* argv[]) {
     std::cout << "TOTAL SCORE: " << score << std::endl;
     if (FLAGS_check_ub) {
       LOG(INFO) << "Calculating the upper bound estimate...";
-      int upper_bound = drones::UpperBoundHigher(*problem).Calc();
+      int upper_bound = drones::UpperBound(*problem).Calc();
       LOG(INFO) << absl::Substitute(
           "\nTotal Score: $0\nUpper Bound: $1\nQuality: $2 %", score,
           upper_bound, 100.0 * score / upper_bound);
