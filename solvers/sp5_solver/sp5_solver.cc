@@ -25,9 +25,9 @@ Sp5Solver::Sp5Solver(const Problem& problem)
 void Sp5Solver::CacheInitial() {
   // Set initial DRONE_LOC at 1.
   {
-    lp_solver::VariableDesc var;
+    ilp_solver::VariableDesc var;
     var.set_t(1);
-    var.set_type(lp_solver::VariableDesc_VariableType_DRONE_LOC);
+    var.set_type(ilp_solver::VariableDesc_VariableType_DRONE_LOC);
     for (int d = 0; d < problem_.nd(); d++) {
       var.set_drone(d);
       var.set_location(0);
@@ -41,9 +41,9 @@ void Sp5Solver::CacheInitial() {
 
   // Set initial WAREHOUSE_STATE at 0.
   {
-    lp_solver::VariableDesc var;
+    ilp_solver::VariableDesc var;
     var.set_t(0);
-    var.set_type(lp_solver::VariableDesc_VariableType_WAREHOUSE_STATE);
+    var.set_type(ilp_solver::VariableDesc_VariableType_WAREHOUSE_STATE);
     for (int w = 0; w < problem_.nw(); w++) {
       var.set_warehouse(w);
       for (int p = 0; p < problem_.np(); p++) {
@@ -56,9 +56,9 @@ void Sp5Solver::CacheInitial() {
 
   // Set initial DRONE_STATE at 0.
   {
-    lp_solver::VariableDesc var;
+    ilp_solver::VariableDesc var;
     var.set_t(0);
-    var.set_type(lp_solver::VariableDesc_VariableType_DRONE_STATE);
+    var.set_type(ilp_solver::VariableDesc_VariableType_DRONE_STATE);
     for (int d = 0; d < problem_.nd(); d++) {
       var.set_drone(d);
       for (int p = 0; p < problem_.np(); p++) {
@@ -70,9 +70,9 @@ void Sp5Solver::CacheInitial() {
 
   // Set intial ORDER_STATE at 0.
   {
-    lp_solver::VariableDesc var;
+    ilp_solver::VariableDesc var;
     var.set_t(0);
-    var.set_type(lp_solver::VariableDesc_VariableType_ORDER_STATE);
+    var.set_type(ilp_solver::VariableDesc_VariableType_ORDER_STATE);
     for (int o = 0; o < problem_.no(); o++) {
       var.set_order(o);
       for (int p = 0; p < problem_.np(); p++) {
@@ -84,13 +84,13 @@ void Sp5Solver::CacheInitial() {
   }
 }
 
-void Sp5Solver::CheckAuxVar(const drones::lp_solver::VariableDesc& var,
+void Sp5Solver::CheckAuxVar(const drones::ilp_solver::VariableDesc& var,
                             const std::string& where) const {
   auto msg =
       absl::Substitute("\nwhere: $0\nvar:\n$1", where, var.DebugString());
   CHECK(var.has_type()) << msg;
   switch (var.type()) {
-    case lp_solver::VariableDesc_VariableType_TOTAL_SCORE: {
+    case ilp_solver::VariableDesc_VariableType_TOTAL_SCORE: {
       CHECK(!var.has_drone()) << msg;
       CHECK(!var.has_location()) << msg;
       CHECK(!var.has_t()) << msg;
@@ -100,7 +100,7 @@ void Sp5Solver::CheckAuxVar(const drones::lp_solver::VariableDesc& var,
       CHECK(!var.has_num_items()) << msg;
       break;
     }
-    case lp_solver::VariableDesc_VariableType_ORDER_SCORE: {
+    case ilp_solver::VariableDesc_VariableType_ORDER_SCORE: {
       CHECK(!var.has_drone()) << msg;
       CHECK(!var.has_location()) << msg;
       CHECK(!var.has_t()) << msg;
@@ -112,7 +112,7 @@ void Sp5Solver::CheckAuxVar(const drones::lp_solver::VariableDesc& var,
       CHECK(!var.has_num_items()) << msg;
       break;
     }
-    case lp_solver::VariableDesc_VariableType_ORDER_COMPLETENESS: {
+    case ilp_solver::VariableDesc_VariableType_ORDER_COMPLETENESS: {
       CHECK(!var.has_drone()) << msg;
       CHECK(!var.has_location()) << msg;
       CHECK(var.has_t()) << msg;
@@ -126,7 +126,7 @@ void Sp5Solver::CheckAuxVar(const drones::lp_solver::VariableDesc& var,
       CHECK(!var.has_num_items()) << msg;
       break;
     }
-    case lp_solver::VariableDesc_VariableType_ORDER_STATE: {
+    case ilp_solver::VariableDesc_VariableType_ORDER_STATE: {
       CHECK(!var.has_drone()) << msg;
       CHECK(!var.has_location()) << msg;
       CHECK(var.has_t()) << msg;
@@ -142,7 +142,7 @@ void Sp5Solver::CheckAuxVar(const drones::lp_solver::VariableDesc& var,
       CHECK(!var.has_num_items()) << msg;
       break;
     }
-    case lp_solver::VariableDesc_VariableType_DRONE_STATE: {
+    case ilp_solver::VariableDesc_VariableType_DRONE_STATE: {
       CHECK(var.has_drone()) << msg;
       CHECK(var.drone() >= 0) << msg;
       CHECK(var.drone() < problem_.nd()) << msg;
@@ -158,7 +158,7 @@ void Sp5Solver::CheckAuxVar(const drones::lp_solver::VariableDesc& var,
       CHECK(!var.has_num_items()) << msg;
       break;
     }
-    case lp_solver::VariableDesc_VariableType_DRONE_LOC: {
+    case ilp_solver::VariableDesc_VariableType_DRONE_LOC: {
       CHECK(var.has_drone()) << msg;
       CHECK(var.drone() >= 0) << msg;
       CHECK(var.drone() < problem_.nd()) << msg;
@@ -174,7 +174,7 @@ void Sp5Solver::CheckAuxVar(const drones::lp_solver::VariableDesc& var,
       CHECK(!var.has_num_items()) << msg;
       break;
     }
-    case lp_solver::VariableDesc_VariableType_WAREHOUSE_STATE: {
+    case ilp_solver::VariableDesc_VariableType_WAREHOUSE_STATE: {
       CHECK(!var.has_drone()) << msg;
       CHECK(!var.has_location()) << msg;
       CHECK(var.has_t()) << msg;
@@ -195,7 +195,7 @@ void Sp5Solver::CheckAuxVar(const drones::lp_solver::VariableDesc& var,
   }
 }
 
-void Sp5Solver::CheckOptVar(const drones::lp_solver::VariableDesc& var,
+void Sp5Solver::CheckOptVar(const drones::ilp_solver::VariableDesc& var,
                             const std::string& where) const {
   auto msg =
       absl::Substitute("\nwhere: $0\nvar:\n$1", where, var.DebugString());
@@ -210,8 +210,8 @@ void Sp5Solver::CheckOptVar(const drones::lp_solver::VariableDesc& var,
   CHECK(var.location() < problem_.nw() + problem_.no()) << msg;
   CHECK(var.has_type()) << msg;
   switch (var.type()) {
-    case lp_solver::VariableDesc_VariableType_LOAD:
-    case lp_solver::VariableDesc_VariableType_UNLOAD: {
+    case ilp_solver::VariableDesc_VariableType_LOAD:
+    case ilp_solver::VariableDesc_VariableType_UNLOAD: {
       CHECK(!var.has_order()) << msg;
       CHECK(var.has_warehouse()) << msg;
       CHECK(var.warehouse() >= 0) << msg;
@@ -227,7 +227,7 @@ void Sp5Solver::CheckOptVar(const drones::lp_solver::VariableDesc& var,
           << msg << absl::Substitute("\nfinish_time: $0", finish_time);
       break;
     }
-    case lp_solver::VariableDesc_VariableType_DELIVER: {
+    case ilp_solver::VariableDesc_VariableType_DELIVER: {
       CHECK(!var.has_warehouse()) << msg;
       CHECK(var.has_order()) << msg;
       CHECK(var.order() >= 0) << msg;
@@ -244,7 +244,7 @@ void Sp5Solver::CheckOptVar(const drones::lp_solver::VariableDesc& var,
           << msg << absl::Substitute("\nfinish_time: $0", finish_time);
       break;
     }
-    case lp_solver::VariableDesc_VariableType_WAIT:
+    case ilp_solver::VariableDesc_VariableType_WAIT:
       CHECK(!var.has_order()) << msg;
       CHECK(!var.has_warehouse()) << msg;
       CHECK(!var.has_product()) << msg;
@@ -256,7 +256,7 @@ void Sp5Solver::CheckOptVar(const drones::lp_solver::VariableDesc& var,
 }
 
 util::lp::LinComb Sp5Solver::Compute(
-    const drones::lp_solver::VariableDesc& var) {
+    const drones::ilp_solver::VariableDesc& var) {
   // Check the var validity.
   CheckAuxVar(var, "COMPUTE ENTRANCE");
 
@@ -268,10 +268,10 @@ util::lp::LinComb Sp5Solver::Compute(
 
   // Handle different variable types.
   util::lp::LinComb res;
-  drones::lp_solver::VariableDesc dep_var;
+  drones::ilp_solver::VariableDesc dep_var;
   switch (var.type()) {
-    case lp_solver::VariableDesc_VariableType_TOTAL_SCORE: {
-      dep_var.set_type(lp_solver::VariableDesc_VariableType_ORDER_SCORE);
+    case ilp_solver::VariableDesc_VariableType_TOTAL_SCORE: {
+      dep_var.set_type(ilp_solver::VariableDesc_VariableType_ORDER_SCORE);
       for (int o = 0; o < problem_.no(); o++) {
         LOG(INFO) << absl::Substitute("TOTAL_SCORE computation: order $0/$1. ",
                                       o + 1, problem_.no());
@@ -280,8 +280,9 @@ util::lp::LinComb Sp5Solver::Compute(
       }
       break;
     }
-    case lp_solver::VariableDesc_VariableType_ORDER_SCORE: {
-      dep_var.set_type(lp_solver::VariableDesc_VariableType_ORDER_COMPLETENESS);
+    case ilp_solver::VariableDesc_VariableType_ORDER_SCORE: {
+      dep_var.set_type(
+          ilp_solver::VariableDesc_VariableType_ORDER_COMPLETENESS);
       dep_var.set_order(var.order());
       for (int t = 1; t <= simulation_time_; t++) {
         dep_var.set_t(t);
@@ -289,8 +290,8 @@ util::lp::LinComb Sp5Solver::Compute(
       }
       break;
     }
-    case lp_solver::VariableDesc_VariableType_ORDER_COMPLETENESS: {
-      dep_var.set_type(lp_solver::VariableDesc_VariableType_ORDER_STATE);
+    case ilp_solver::VariableDesc_VariableType_ORDER_COMPLETENESS: {
+      dep_var.set_type(ilp_solver::VariableDesc_VariableType_ORDER_STATE);
       dep_var.set_order(var.order());
       dep_var.set_t(var.t());
       int total_order_items = 0;
@@ -303,8 +304,8 @@ util::lp::LinComb Sp5Solver::Compute(
       res.coef["const"] += 1;
       break;
     }
-    case lp_solver::VariableDesc_VariableType_ORDER_STATE: {
-      dep_var.set_type(lp_solver::VariableDesc_VariableType_ORDER_STATE);
+    case ilp_solver::VariableDesc_VariableType_ORDER_STATE: {
+      dep_var.set_type(ilp_solver::VariableDesc_VariableType_ORDER_STATE);
       dep_var.set_order(var.order());
       dep_var.set_t(var.t() - 1);
       dep_var.set_product(var.product());
@@ -312,7 +313,7 @@ util::lp::LinComb Sp5Solver::Compute(
       dep_var.Clear();
 
       util::lp::LinComb delivery;
-      dep_var.set_type(lp_solver::VariableDesc_VariableType_DELIVER);
+      dep_var.set_type(ilp_solver::VariableDesc_VariableType_DELIVER);
       dep_var.set_product(var.product());
       dep_var.set_order(var.order());
 
@@ -339,8 +340,8 @@ util::lp::LinComb Sp5Solver::Compute(
       res += delivery;
       break;
     }
-    case lp_solver::VariableDesc_VariableType_DRONE_STATE: {
-      dep_var.set_type(lp_solver::VariableDesc_VariableType_DRONE_STATE);
+    case ilp_solver::VariableDesc_VariableType_DRONE_STATE: {
+      dep_var.set_type(ilp_solver::VariableDesc_VariableType_DRONE_STATE);
       dep_var.set_drone(var.drone());
       dep_var.set_t(var.t() - 1);
       dep_var.set_product(var.product());
@@ -368,7 +369,7 @@ util::lp::LinComb Sp5Solver::Compute(
             int max_n = problem_.m() / problem_.product(var.product()).m();
             for (int n = 1; n <= max_n; n++) {
               dep_var.set_num_items(n);
-              dep_var.set_type(lp_solver::VariableDesc_VariableType_LOAD);
+              dep_var.set_type(ilp_solver::VariableDesc_VariableType_LOAD);
               traffic.coef[util::lp::SavyProtoHash(dep_var)] = n;
             }
           }
@@ -379,7 +380,7 @@ util::lp::LinComb Sp5Solver::Compute(
             int max_n = problem_.m() / problem_.product(var.product()).m();
             for (int n = 1; n <= max_n; n++) {
               dep_var.set_num_items(n);
-              dep_var.set_type(lp_solver::VariableDesc_VariableType_UNLOAD);
+              dep_var.set_type(ilp_solver::VariableDesc_VariableType_UNLOAD);
               traffic.coef[util::lp::SavyProtoHash(dep_var)] = -n;
             }
           }
@@ -387,7 +388,7 @@ util::lp::LinComb Sp5Solver::Compute(
         dep_var.clear_warehouse();
 
         // Handle DELIVER commands.
-        dep_var.set_type(lp_solver::VariableDesc_VariableType_DELIVER);
+        dep_var.set_type(ilp_solver::VariableDesc_VariableType_DELIVER);
         for (int o = 0; o < problem_.no(); o++) {
           dep_var.set_order(o);
 
@@ -409,8 +410,8 @@ util::lp::LinComb Sp5Solver::Compute(
       res += traffic;
       break;
     }
-    case lp_solver::VariableDesc_VariableType_DRONE_LOC: {
-      dep_var.set_type(lp_solver::VariableDesc_VariableType_WAIT);
+    case ilp_solver::VariableDesc_VariableType_DRONE_LOC: {
+      dep_var.set_type(ilp_solver::VariableDesc_VariableType_WAIT);
       dep_var.set_drone(var.drone());
       dep_var.set_location(var.location());
       dep_var.set_t(var.t() - 1);
@@ -437,9 +438,9 @@ util::lp::LinComb Sp5Solver::Compute(
             int max_n = problem_.m() / problem_.product(p).m();
             for (int n = 1; n <= max_n; n++) {
               dep_var.set_num_items(n);
-              dep_var.set_type(lp_solver::VariableDesc_VariableType_UNLOAD);
+              dep_var.set_type(ilp_solver::VariableDesc_VariableType_UNLOAD);
               res.coef[util::lp::SavyProtoHash(dep_var)] = 1;
-              dep_var.set_type(lp_solver::VariableDesc_VariableType_LOAD);
+              dep_var.set_type(ilp_solver::VariableDesc_VariableType_LOAD);
               res.coef[util::lp::SavyProtoHash(dep_var)] = 1;
             }
           } else {
@@ -450,7 +451,7 @@ util::lp::LinComb Sp5Solver::Compute(
                                  problem_.m() / problem_.product(p).m());
             for (int n = 1; n <= max_n; n++) {
               dep_var.set_num_items(n);
-              dep_var.set_type(lp_solver::VariableDesc_VariableType_DELIVER);
+              dep_var.set_type(ilp_solver::VariableDesc_VariableType_DELIVER);
               res.coef[util::lp::SavyProtoHash(dep_var)] = 1;
             }
           }
@@ -458,8 +459,8 @@ util::lp::LinComb Sp5Solver::Compute(
       }
       break;
     }
-    case lp_solver::VariableDesc_VariableType_WAREHOUSE_STATE: {
-      dep_var.set_type(lp_solver::VariableDesc_VariableType_WAREHOUSE_STATE);
+    case ilp_solver::VariableDesc_VariableType_WAREHOUSE_STATE: {
+      dep_var.set_type(ilp_solver::VariableDesc_VariableType_WAREHOUSE_STATE);
       dep_var.set_warehouse(var.warehouse());
       dep_var.set_product(var.product());
       dep_var.set_t(var.t() - 1);
@@ -478,7 +479,7 @@ util::lp::LinComb Sp5Solver::Compute(
         // previous step and LOAD should be ending in this step.
 
         // Handle LOADs.
-        dep_var.set_type(lp_solver::VariableDesc_VariableType_LOAD);
+        dep_var.set_type(ilp_solver::VariableDesc_VariableType_LOAD);
         int start_time =
             var.t() - problem_.dist().src(loc).dst(var.warehouse());
         if (start_time >= 1) {
@@ -494,7 +495,7 @@ util::lp::LinComb Sp5Solver::Compute(
         }
 
         // Handle UNLOADs.
-        dep_var.set_type(lp_solver::VariableDesc_VariableType_UNLOAD);
+        dep_var.set_type(ilp_solver::VariableDesc_VariableType_UNLOAD);
         start_time =
             var.t() - problem_.dist().src(loc).dst(var.warehouse()) - 1;
         if (start_time >= 1) {
@@ -520,9 +521,9 @@ util::lp::LinComb Sp5Solver::Compute(
 }
 
 std::unique_ptr<Solution> Sp5Solver::Solve() {
-  lp_solver::VariableDesc var_desc;
+  ilp_solver::VariableDesc var_desc;
 
-  var_desc.set_type(lp_solver::VariableDesc_VariableType_TOTAL_SCORE);
+  var_desc.set_type(ilp_solver::VariableDesc_VariableType_TOTAL_SCORE);
   LOG(INFO) << "Computing the cost functioni...";
   auto cost_fn = Compute(var_desc);
   LOG(INFO) << absl::Substitute("$0 entries in the CACHE",
@@ -549,7 +550,7 @@ std::unique_ptr<Solution> Sp5Solver::Solve() {
     if (var.first == "const") continue;
     vars[var.first] =
         solver.MakeIntVar(0.0, 1.0, std::to_string(var_int_names++));
-    lp_solver::VariableDesc temp;
+    ilp_solver::VariableDesc temp;
     CHECK(temp.ParseFromString(var.first));
     CheckOptVar(temp, "cost_fn");
   }
@@ -572,7 +573,7 @@ std::unique_ptr<Solution> Sp5Solver::Solve() {
 
   auto check_opt_vars = [&](const std::string& where) {
     for (const auto& var : vars) {
-      lp_solver::VariableDesc temp;
+      ilp_solver::VariableDesc temp;
       CHECK(temp.ParseFromString(var.first)) << where;
       CheckOptVar(temp, where);
     }
@@ -580,7 +581,7 @@ std::unique_ptr<Solution> Sp5Solver::Solve() {
 
   // (1) WAREHOUSE_STATE >= 0
   LOG(INFO) << "Creating WAREHOUSE_STATE >= 0 constraints.";
-  var_desc.set_type(lp_solver::VariableDesc_VariableType_WAREHOUSE_STATE);
+  var_desc.set_type(ilp_solver::VariableDesc_VariableType_WAREHOUSE_STATE);
   for (int w = 0; w < problem_.nw(); w++) {
     var_desc.set_warehouse(w);
     for (int p = 0; p < problem_.np(); p++) {
@@ -602,7 +603,7 @@ std::unique_ptr<Solution> Sp5Solver::Solve() {
 
   // (2) 0 <= DRONE_STATE <= MAX_WEIGHT
   LOG(INFO) << "Creating 0 <= DRONE_STATE <= MAX_WEIGHT constraints.";
-  var_desc.set_type(lp_solver::VariableDesc_VariableType_DRONE_STATE);
+  var_desc.set_type(ilp_solver::VariableDesc_VariableType_DRONE_STATE);
   for (int d = 0; d < problem_.nd(); d++) {
     var_desc.set_drone(d);
     for (int t = 1; t <= simulation_time_; t++) {
@@ -634,7 +635,7 @@ std::unique_ptr<Solution> Sp5Solver::Solve() {
 
   // (3) ORDER_STATE >= 0
   LOG(INFO) << "Creating ORDER_STATE >= 0 constraints.";
-  var_desc.set_type(lp_solver::VariableDesc_VariableType_ORDER_STATE);
+  var_desc.set_type(ilp_solver::VariableDesc_VariableType_ORDER_STATE);
   for (int o = 0; o < problem_.no(); o++) {
     var_desc.set_order(o);
     for (int p = 0; p < problem_.np(); p++) {
@@ -663,14 +664,14 @@ std::unique_ptr<Solution> Sp5Solver::Solve() {
       for (int loc = 0; loc < problem_.nw() + problem_.no(); loc++) {
         var_desc.set_location(loc);
 
-        var_desc.set_type(lp_solver::VariableDesc_VariableType_DRONE_LOC);
+        var_desc.set_type(ilp_solver::VariableDesc_VariableType_DRONE_LOC);
         util::lp::LinComb minus_drone_loc = Compute(var_desc);
         minus_drone_loc *= -1.0;
 
         util::lp::LinComb poly;
 
         // wait - drone_loc <= 0;
-        var_desc.set_type(lp_solver::VariableDesc_VariableType_WAIT);
+        var_desc.set_type(ilp_solver::VariableDesc_VariableType_WAIT);
         poly = minus_drone_loc;
         poly.coef[util::lp::SavyProtoHash(var_desc)] += 1.0;
         {
@@ -695,7 +696,7 @@ std::unique_ptr<Solution> Sp5Solver::Solve() {
               var_desc.set_num_items(n);
 
               poly = minus_drone_loc;
-              var_desc.set_type(lp_solver::VariableDesc_VariableType_LOAD);
+              var_desc.set_type(ilp_solver::VariableDesc_VariableType_LOAD);
               poly.coef[util::lp::SavyProtoHash(var_desc)] += 1.0;
               {
                 MPConstraint* c =
@@ -707,7 +708,7 @@ std::unique_ptr<Solution> Sp5Solver::Solve() {
               }
 
               poly = minus_drone_loc;
-              var_desc.set_type(lp_solver::VariableDesc_VariableType_UNLOAD);
+              var_desc.set_type(ilp_solver::VariableDesc_VariableType_UNLOAD);
               poly.coef[util::lp::SavyProtoHash(var_desc)] += 1.0;
               {
                 MPConstraint* c =
@@ -733,7 +734,7 @@ std::unique_ptr<Solution> Sp5Solver::Solve() {
               var_desc.set_num_items(n);
 
               poly = minus_drone_loc;
-              var_desc.set_type(lp_solver::VariableDesc_VariableType_DELIVER);
+              var_desc.set_type(ilp_solver::VariableDesc_VariableType_DELIVER);
               CheckOptVar(var_desc, "da, da, tu");
               poly.coef[util::lp::SavyProtoHash(var_desc)] += 1.0;
               {
@@ -767,7 +768,7 @@ std::unique_ptr<Solution> Sp5Solver::Solve() {
         var_desc.set_drone(d);
         var_desc.set_t(t);
         var_desc.set_location(loc);
-        var_desc.set_type(lp_solver::VariableDesc_VariableType_WAIT);
+        var_desc.set_type(ilp_solver::VariableDesc_VariableType_WAIT);
         c->SetCoefficient(var_access(util::lp::SavyProtoHash(var_desc)), 1.0);
 
         // LOADs and UNLOADs
@@ -785,10 +786,10 @@ std::unique_ptr<Solution> Sp5Solver::Solve() {
               for (int n = 1; n <= max_n; n++) {
                 var_desc.set_num_items(n);
 
-                var_desc.set_type(lp_solver::VariableDesc_VariableType_LOAD);
+                var_desc.set_type(ilp_solver::VariableDesc_VariableType_LOAD);
                 c->SetCoefficient(var_access(util::lp::SavyProtoHash(var_desc)),
                                   1.0);
-                var_desc.set_type(lp_solver::VariableDesc_VariableType_UNLOAD);
+                var_desc.set_type(ilp_solver::VariableDesc_VariableType_UNLOAD);
                 c->SetCoefficient(var_access(util::lp::SavyProtoHash(var_desc)),
                                   1.0);
               }
@@ -815,7 +816,8 @@ std::unique_ptr<Solution> Sp5Solver::Solve() {
               for (int n = 1; n <= max_n; n++) {
                 var_desc.set_num_items(n);
 
-                var_desc.set_type(lp_solver::VariableDesc_VariableType_DELIVER);
+                var_desc.set_type(
+                    ilp_solver::VariableDesc_VariableType_DELIVER);
                 c->SetCoefficient(var_access(util::lp::SavyProtoHash(var_desc)),
                                   1.0);
               }
@@ -858,26 +860,26 @@ std::unique_ptr<Solution> Sp5Solver::Solve() {
     cmd->set_drone(var_desc.drone());
     cmd->set_start_time(var_desc.t());
     switch (var_desc.type()) {
-      case lp_solver::VariableDesc_VariableType_WAIT: {
+      case ilp_solver::VariableDesc_VariableType_WAIT: {
         cmd->set_type(DroneCommand_CommandType_WAIT);
         cmd->set_duration(1);
         break;
       }
-      case lp_solver::VariableDesc_VariableType_LOAD: {
+      case ilp_solver::VariableDesc_VariableType_LOAD: {
         cmd->set_type(DroneCommand_CommandType_LOAD);
         cmd->set_product(var_desc.product());
         cmd->set_num_items(var_desc.num_items());
         cmd->set_warehouse(var_desc.warehouse());
         break;
       }
-      case lp_solver::VariableDesc_VariableType_UNLOAD: {
+      case ilp_solver::VariableDesc_VariableType_UNLOAD: {
         cmd->set_type(DroneCommand_CommandType_UNLOAD);
         cmd->set_product(var_desc.product());
         cmd->set_num_items(var_desc.num_items());
         cmd->set_warehouse(var_desc.warehouse());
         break;
       }
-      case lp_solver::VariableDesc_VariableType_DELIVER: {
+      case ilp_solver::VariableDesc_VariableType_DELIVER: {
         cmd->set_type(DroneCommand_CommandType_DELIVER);
         cmd->set_product(var_desc.product());
         cmd->set_num_items(var_desc.num_items());

@@ -17,7 +17,7 @@ class ProblemSolverFactory {
   //    - sp4:    Subproblem 4 solver with allocation.
   //    - sp5:    Subproblem 5 optimal but super slow ILP solver. Uses GLPK
   //              behind the OR-Tools solver frontend.
-  //    - lp:     Linearizing the problem, uses GLPK behind the OR-Tools solver
+  //    - ilp:    Linearizing the problem, uses GLPK behind the OR-Tools solver
   //              frontend.
   //    - random: A totally random solver.
   //    - ga:     Genetic algorithm solver with strategies. Can be used as a

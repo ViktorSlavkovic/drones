@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "glog/logging.h"
-#include "solvers/lp_solver/lp_solver.pb.h"
+#include "solvers/ilp_solver/ilp_solver.pb.h"
 #include "solvers/problem_solver.h"
 #include "solvers/util/lp_util.h"
 
@@ -34,15 +34,15 @@ class Sp5Solver : public ProblemSolver {
   
   // Check the validity of an auxiliary variable. Basically a CHECK pack, dies
   // if invalid.
-  void CheckAuxVar(const drones::lp_solver::VariableDesc& var,
+  void CheckAuxVar(const drones::ilp_solver::VariableDesc& var,
                    const std::string& where) const;
   // Same for the main optimization vars.
-  void CheckOptVar(const drones::lp_solver::VariableDesc& var,
+  void CheckOptVar(const drones::ilp_solver::VariableDesc& var,
                    const std::string& where) const;
 
   // Computes the the auxiliary variables as decision variables linear
   // combinations.
-  util::lp::LinComb Compute(const drones::lp_solver::VariableDesc& var);
+  util::lp::LinComb Compute(const drones::ilp_solver::VariableDesc& var);
 };
 
 }  // namespace drones

@@ -10,7 +10,7 @@ cc_library(
         "//solvers/cwf_solver",
         "//solvers/ecf_solver",
         "//solvers/ga_solver",
-        "//solvers/lp_solver",
+        "//solvers/ilp_solver",
         "//solvers/random_solver",
         "//solvers/sp1_solver",
         "//solvers/sp2_solver",

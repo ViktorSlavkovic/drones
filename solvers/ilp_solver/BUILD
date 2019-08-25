@@ -1,12 +1,12 @@
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
-    name = "lp_solver",
-    srcs = ["lp_solver.cc"],
-    hdrs = ["lp_solver.h"],
+    name = "ilp_solver",
+    srcs = ["ilp_solver.cc"],
+    hdrs = ["ilp_solver.h"],
     linkstatic = True,
     deps = [
-        ":lp_solver_cc_proto",
+        ":ilp_solver_cc_proto",
         "//:problem_cc_proto",
         "//:solution_cc_proto",
         "//solvers:problem_solver",
@@ -20,12 +20,11 @@ cc_library(
 )
 
 cc_proto_library(
-    name = "lp_solver_cc_proto",
-    deps = [":lp_solver_proto"],
+    name = "ilp_solver_cc_proto",
+    deps = [":ilp_solver_proto"],
 )
 
 proto_library(
-    name = "lp_solver_proto",
-    srcs = ["lp_solver.proto"],
+    name = "ilp_solver_proto",
+    srcs = ["ilp_solver.proto"],
 )
-

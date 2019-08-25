@@ -3,7 +3,7 @@
 #include "glog/logging.h"
 #include "solvers/cwf_solver/cwf_solver.h"
 #include "solvers/ecf_solver/ecf_solver.h"
-#include "solvers/lp_solver/lp_solver.h"
+#include "solvers/ilp_solver/ilp_solver.h"
 #include "solvers/random_solver/random_solver.h"
 #include "solvers/sp1_solver/sp1_solver.h"
 #include "solvers/sp2_solver/sp2_solver.h"
@@ -17,8 +17,8 @@ namespace drones {
 std::unique_ptr<ProblemSolver> ProblemSolverFactory::CreateSolver(
     const Problem& problem, const std::string& solver_type) {
   std::unique_ptr<ProblemSolver> solver = nullptr;
-  if (solver_type == "lp") {
-    solver = std::make_unique<LpSolver>(problem);
+  if (solver_type == "ilp") {
+    solver = std::make_unique<IlpSolver>(problem);
   } else if (solver_type == "random") {
     solver = std::make_unique<RandomSolver>(problem);
   } else if (solver_type == "sp1") {

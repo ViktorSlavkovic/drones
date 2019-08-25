@@ -6,10 +6,10 @@ cc_library(
     hdrs = ["sp5_solver.h"],
     linkstatic = True,
     deps = [
-        "//solvers/lp_solver:lp_solver_cc_proto",
         "//:problem_cc_proto",
         "//:solution_cc_proto",
         "//solvers:problem_solver",
+        "//solvers/ilp_solver:ilp_solver_cc_proto",
         "//solvers/util:lp_util",
         "@com_github_glog_glog//:glog",
         "@com_google_absl//absl/strings",
